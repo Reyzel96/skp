@@ -1,0 +1,12 @@
+node_modules
+node_modules
+
+.env
+
+vendor
+storage/*.log
+.env.backup
+
+_backups-archive/
+public/uploads/
+*.sql
