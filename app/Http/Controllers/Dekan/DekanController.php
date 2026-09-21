@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Dekan;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{User, SkpHeader, SkpDosen, SkpTendik};
+use App\Models\{User, SkpHeader, SkpDosen, SkpTendik, MasterSkpTendik, Prodi};
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 
 class DekanController extends Controller
 {
@@ -16,18 +17,89 @@ class DekanController extends Controller
     {
         $user = auth()->user();
 
-        // Data fakultas (sementara hardcode, nanti bisa query DB)
-        $totalDosen = 150;
-        $totalMahasiswa = 2500;
-        $totalProdi = 7;
-        $totalStaff = 45;
+        // Akses eksklusif role Dekan.
+        // Permission 'akses-dashboard-pimpinan' juga dipakai Wadek 1/2, sehingga
+        // halaman ini bisa dibuka manual oleh mereka. Cek role spesifik & arahkan
+        // ke dashboard masing-masing (logic serupa closure /dashboard web.php:51).
+        $role = $user->roles()->orderBy('kategori', 'asc')->first();
+        $intended = ($role && !empty($role->dashboard_route))
+            ? $role->dashboard_route
+            : 'pegawai.dashboard';
+        if ($intended !== 'dekan.dashboard') {
+            $target = Route::has($intended) ? $intended : 'pegawai.dashboard';
+            return redirect()->route($target);
+        }
+
+        // ===== STAT CARDS (query asli, tanpa hardcode) =====
+        $totalDosen  = User::whereHas('roles', fn($q) => $q->where('name', 'like', 'Dosen%'))->count();
+        $totalTendik = User::whereHas('roles', fn($q) => $q->where('kategori', 'tendik'))->count();
+        $totalProdi  = Prodi::count();
+
+        // Status yang dianggap SUDAH final (bukan menunggu approval Dekan).
+        // Sesuai arahan: exclude 'Disetujui', 'Selesai', 'Ditolak'.
+        $finalStatus = ['Disetujui', 'Selesai', 'Ditolak'];
+
+        $dosenPending = SkpHeader::whereHas('user.roles', fn($q) => $q->where('kategori', 'utama'))
+            ->whereNotIn('status', $finalStatus)
+            ->with(['user.profile', 'periode'])
+            ->get();
+
+        $kualitatifPending = SkpHeader::whereHas('skpKualitatifs')
+            ->whereNotIn('status', $finalStatus)
+            ->with(['user.profile', 'periode'])
+            ->get();
+
+        $tendikPending = MasterSkpTendik::where('status_approval', 'pending')
+            ->with(['user.profile', 'header.periode'])
+            ->get();
+
+        $totalPending = $dosenPending->count() + $kualitatifPending->count() + $tendikPending->count();
+
+        // ===== TABEL GABUNGAN (5 terbaru) =====
+        $rows = collect();
+
+        foreach ($dosenPending as $h) {
+            $rows->push([
+                'pegawai' => optional($h->user->profile)->nama_lengkap ?? ($h->user->name ?? '-'),
+                'jenis'   => 'SKP Dosen',
+                'periode' => optional($h->periode)->nama_periode ?? '-',
+                'status'  => $h->status,
+                'url'     => route('penilai.evaluasi.show', $h->id),
+                'sort'    => $h->updated_at ?? $h->created_at,
+            ]);
+        }
+
+        foreach ($kualitatifPending as $h) {
+            $rows->push([
+                'pegawai' => optional($h->user->profile)->nama_lengkap ?? ($h->user->name ?? '-'),
+                'jenis'   => 'SKP Kualitatif',
+                'periode' => optional($h->periode)->nama_periode ?? '-',
+                'status'  => $h->status,
+                'url'     => route('penilai.approval-skp-dosen-kualitatif.show', $h->id),
+                'sort'    => $h->updated_at ?? $h->created_at,
+            ]);
+        }
+
+        foreach ($tendikPending as $m) {
+            $rows->push([
+                'pegawai' => optional(optional($m->user)->profile)->nama_lengkap ?? ($m->user->name ?? '-'),
+                'jenis'   => 'SKP Tendik',
+                'periode' => optional(optional($m->header)->periode)->nama_periode ?? '-',
+                'status'  => $m->status_approval,
+                'url'     => route('penilai.approval-skp-tendik.show', $m->skp_header_id),
+                'sort'    => $m->updated_at ?? $m->created_at,
+            ]);
+        }
+
+        $approvalRows = $rows->sortByDesc(fn($r) => $r['sort'])->take(5)->values();
 
         return view('dekan.dashboard', compact(
             'user',
             'totalDosen',
-            'totalMahasiswa',
+            'totalTendik',
             'totalProdi',
-            'totalStaff'
+            'totalPending',
+            'approvalRows'
         ));
     }
 

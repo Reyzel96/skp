@@ -12,7 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('program_kegiatan', function (Blueprint $table) {
-            $table->dropColumn(['per_mhs', 'anggaran']);
+            if (Schema::hasColumn('program_kegiatan', 'per_mhs')) {
+                $table->dropColumn('per_mhs');
+            }
+            if (Schema::hasColumn('program_kegiatan', 'anggaran')) {
+                $table->dropColumn('anggaran');
+            }
         });
     }
 
@@ -22,8 +27,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('program_kegiatan', function (Blueprint $table) {
-            $table->decimal('per_mhs', 15, 2)->nullable();
-            $table->decimal('anggaran', 15, 2)->default(0);
+            if (!Schema::hasColumn('program_kegiatan', 'per_mhs')) {
+                $table->decimal('per_mhs', 15, 2)->nullable();
+            }
+            if (!Schema::hasColumn('program_kegiatan', 'anggaran')) {
+                $table->decimal('anggaran', 15, 2)->default(0);
+            }
         });
     }
 };

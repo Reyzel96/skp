@@ -172,6 +172,26 @@
                         </select>
                     </div>
 
+                    <hr class="border-gray-200 my-8">
+
+                    <h3 class="text-xl font-black text-gray-800 border-l-4 border-orange-500 pl-3">Label Periode (Opsional - Override)</h3>
+                    <p class="text-xs text-gray-500 mt-2 font-medium mb-4">Kosongkan untuk otomatis (Triwulan I / 1 Januari s.d. 31 Maret 2026). Diisi hanya bila admin ingin mengubah teks periode secara manual pada dokumen SKP.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-3 uppercase tracking-widest">Label Triwulan</label>
+                            <input type="text" name="label_triwulan" id="label_triwulan"
+                                value="{{ old('label_triwulan') }}"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl font-semibold shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-3 uppercase tracking-widest">Label Periode Penilaian</label>
+                            <input type="text" name="label_periode_penilaian" id="label_periode_penilaian"
+                                value="{{ old('label_periode_penilaian') }}"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl font-semibold shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
                     <div class="flex flex-col md:flex-row gap-4 pt-6 mt-8 border-t border-gray-100">
                         <button type="submit"
                             class="flex-1 bg-blue-600 text-white py-4 px-6 rounded-xl font-black text-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all shadow-lg hover:-translate-y-1">

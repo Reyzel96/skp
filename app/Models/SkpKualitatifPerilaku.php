@@ -14,7 +14,6 @@ class SkpKualitatifPerilaku extends Model
         'ekspektasi_pimpinan',
         'umpan_balik',
         'hasil_kerja',
-        'butuh_lampiran',
     ];
 
     public function skpHeader()

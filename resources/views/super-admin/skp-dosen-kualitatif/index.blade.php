@@ -87,7 +87,7 @@
 
                         <tbody class="divide-y divide-gray-100">
                             @forelse($skpKualitatifs as $skp)
-                                <tr onclick="window.location='{{ route('superadmin.skp-dosen-kualitatif.show', $skp->id) }}'" class="hover:bg-emerald-50/50 transition-colors group cursor-pointer">
+                                <tr data-turbo-row="{{ route('superadmin.skp-dosen-kualitatif.show', $skp->id) }}" class="hover:bg-emerald-50/50 transition-colors group cursor-pointer">
                                     <td class="px-4 py-4 text-center text-gray-500 align-top" onclick="event.stopPropagation()">{{ $loop->iteration }}</td>
                                     <td class="px-4 py-4 align-top">
                                         <p class="font-bold text-gray-900">

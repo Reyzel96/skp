@@ -18,7 +18,7 @@
             {{-- Info Biodata --}}
             <div class="flex-1 w-full">
                 <div class="flex flex-col md:flex-row justify-between items-center md:items-start mb-1">
-                    <h2 class="text-2xl font-bold text-gray-800">Selamat Datang, {{ $user->profile->nama_lengkap ?? $user->name }}</h2>
+                    <h2 class="text-2xl font-bold text-gray-800">{{ $user->profile->nama_lengkap ?? $user->name }}</h2>
                     <span class="mt-2 md:mt-0 px-4 py-1.5 bg-blue-100 text-blue-800 rounded-full font-bold text-xs uppercase tracking-wider">
                         Akreditasi: {{ $data['akreditasi'] ?? '-' }}
                     </span>

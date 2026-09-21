@@ -57,11 +57,12 @@ class EvaluasiBawahanController extends Controller
                 'perilakuIndicators'
             ])->findOrFail($header_id);
         
-        $isBypassRole = $penilai->hasAnyRole(['Dekan', 'Rektorat', 'Rektor']) || 
+        $isBypassRole = $penilai->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2']) || 
                         $penilai->roles->contains(fn($r) => str_contains($r->name, 'Kaprodi'));
         $isAssignedEvaluator = ($header->penilai_utama_id == $penilai->id || $header->penilai_akhir_id == $penilai->id || $header->pejabat_penilai_id == $penilai->id || $header->atasan_pejabat_penilai_id == $penilai->id);
 
         // Pastikan user yang login adalah salah satu penilai di SKP ini ATAU pimpinan (Bypass/Monitor)
+        // (selaras dgn guard index()/verify(): Wadek 1 & Wadek 2 juga boleh memantau)
         if (!$isAssignedEvaluator && !$isBypassRole) {
             abort(403, 'Anda tidak memiliki hak akses untuk melihat SKP ini.');
         }
@@ -482,12 +483,20 @@ class EvaluasiBawahanController extends Controller
         ]);
     }
 
+    /**
+     * Bobot hasil kerja dari Cache rumus admin (sama sumber dgn JS client
+     * hasilKerjaMap: index 0=Diatas, 1=Sesuai, 2=Dibawah).
+     * Non-retroaktif: skp_headers final TIDAK dihitung ulang — nilai tersimpan
+     * tetap; hanya SKP yang dinilai SETELAH bobot berubah yang terdampak.
+     */
     private function hasilKerjaToScore(?string $hasilKerja): int
     {
+        $bobot = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+
         return match ($hasilKerja) {
-            'Diatas Ekspektasi' => 3,
-            'Sesuai Ekspektasi' => 2,
-            'Dibawah Ekspektasi' => 1,
+            'Diatas Ekspektasi' => (int) ($bobot[0] ?? 3),
+            'Sesuai Ekspektasi' => (int) ($bobot[1] ?? 2),
+            'Dibawah Ekspektasi' => (int) ($bobot[2] ?? 1),
             default => 0,
         };
     }

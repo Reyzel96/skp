@@ -180,10 +180,17 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                             <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-2">Pangkat / Golongan</label>
-                                <input type="text" name="pangkat_golongan" value="{{ old('pangkat_golongan') }}"
-                                    placeholder="Contoh: Penata Tk. I / III/d"
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Jenjang Jabatan</label>
+                                <select name="jenjang_jabatan_id" id="jenjang_jabatan_id"
                                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="">-- Pilih Jenjang Jabatan --</option>
+                                    @foreach ($jenjangJabatans as $jenjang)
+                                        <option value="{{ $jenjang->id }}"
+                                            {{ old('jenjang_jabatan_id') == $jenjang->id ? 'selected' : '' }}>
+                                            {{ $jenjang->nama }}
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-gray-700 mb-2">Unit Kerja / Penempatan</label>
@@ -191,6 +198,28 @@
                                     placeholder="Contoh: Fakultas Teknik / Pusat Komputer"
                                     class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                             </div>
+                        </div>
+
+                        <!-- Pangkat / Golongan dependent dropdown -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Pangkat / Golongan</label>
+                            <select name="pangkat_golongan_id" id="pangkat_golongan_id"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                disabled>
+                                <option value="">-- Pilih dulu Jenjang Jabatan --</option>
+                            </select>
+                        </div>
+
+                        <!-- Manual input (hidden by default) -->
+                        <div class="mb-4" id="pangkat_golongan_manual_wrapper" style="display: none;">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Pangkat / Golongan (Manual)</label>
+                            <input type="text" name="pangkat_golongan" id="pangkat_golongan_manual"
+                                value="{{ old('pangkat_golongan') }}"
+                                placeholder="Contoh: Penata Tk. I / III/d"
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            @error('pangkat_golongan')
+                                <span class="text-red-500 text-sm mt-1 block">{{ $message }}</span>
+                            @enderror
                         </div>
                     </div>
 
@@ -283,6 +312,54 @@
 
             // Jalankan saat load (untuk menangani 'old' data)
             updateMutualExclusivity();
+
+            // =========================================================
+            // Pangkat / Golongan dependent dropdown (LANGKAH 5b)
+            // =========================================================
+            const jenjangSelect = document.getElementById('jenjang_jabatan_id');
+            const pangkatSelect = document.getElementById('pangkat_golongan_id');
+            const manualWrapper = document.getElementById('pangkat_golongan_manual_wrapper');
+            const manualInput = document.getElementById('pangkat_golongan_manual');
+
+            jenjangSelect.addEventListener('change', function() {
+                const jenjangId = this.value;
+                pangkatSelect.innerHTML = '<option value="">-- Pilih Pangkat / Golongan --</option>';
+                manualWrapper.style.display = 'none';
+                manualInput.value = '';
+
+                if (jenjangId) {
+                    pangkatSelect.disabled = false;
+
+                    fetch('/lookup/pangkat-golongan/by-jenjang/' + jenjangId)
+                        .then(r => r.json())
+                        .then(data => {
+                            data.forEach(pg => {
+                                const opt = document.createElement('option');
+                                opt.value = pg.id;
+                                opt.textContent = pg.kode_pangkat + ' — ' + pg.nama_pangkat;
+                                pangkatSelect.appendChild(opt);
+                            });
+                            // Tambahkan opsi "Lainnya / Input Manual"
+                            const manualOpt = document.createElement('option');
+                            manualOpt.value = 'manual';
+                            manualOpt.textContent = 'Lainnya / Input Manual';
+                            pangkatSelect.appendChild(manualOpt);
+                        });
+                } else {
+                    pangkatSelect.disabled = true;
+                }
+            });
+
+            pangkatSelect.addEventListener('change', function() {
+                if (this.value === 'manual') {
+                    manualWrapper.style.display = 'block';
+                    manualInput.required = true;
+                } else {
+                    manualWrapper.style.display = 'none';
+                    manualInput.required = false;
+                    manualInput.value = '';
+                }
+            });
         });
     </script>
     @endpush

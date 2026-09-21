@@ -99,7 +99,7 @@
 
                                 {{-- ✅ Baris dapat diklik untuk ke halaman Show --}}
                                 <tr class="hover:bg-emerald-50/50 transition-colors group cursor-pointer"
-                                    onclick="window.location='{{ route('superadmin.skp-dosen.show', $header->id) }}'">
+                                    data-turbo-row="{{ route('superadmin.skp-dosen.show', $header->id) }}">
                                     <td class="px-4 py-4 text-center text-gray-500 align-top">{{ $loop->iteration }}</td>
                                     <td class="px-4 py-4 align-top">
                                         <p class="font-bold text-gray-900">

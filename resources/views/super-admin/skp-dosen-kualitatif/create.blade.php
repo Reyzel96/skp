@@ -77,16 +77,25 @@
                             }
                         },
 
-                        dukunganRows: [{ id: 1 }, { id: 2 }],
-                        addDukunganRow() { this.dukunganRows.push({ id: Date.now() }); },
+                        dukunganRows: [
+                            { id: 1, text: "Dukungan sarana kerja yang memadai" },
+                            { id: 2, text: "Kecukupan dan transparansi Alokasi Anggaran untuk Tridharma" },
+                        ],
+                        addDukunganRow() { this.dukunganRows.push({ id: Date.now(), text: "" }); },
                         removeDukunganRow(id) { if (this.dukunganRows.length > 1) this.dukunganRows = this.dukunganRows.filter(r => r.id !== id); },
 
-                        skemaRows: [{ id: 1 }, { id: 2 }, { id: 3 }],
-                        addSkemaRow() { this.skemaRows.push({ id: Date.now() }); },
+                        skemaRows: [
+                            { id: 1, text: "Rekapitulasi hasil pekerjaan diserahkan setiap 3 bulan kepada atasan yang ditunjuk Pimpinan PTS" },
+                            { id: 2, text: "Proses dan hasil kerja dilaporkan dan dievaluasi minimal 2 kali dalam setahun &/atau Persemester" },
+                            { id: 3, text: "Pengisian kehadiran dan aktivitas lookbook harian melalui sistem informasi SDM fakultas." },
+                        ],
+                        addSkemaRow() { this.skemaRows.push({ id: Date.now(), text: "" }); },
                         removeSkemaRow(id) { if (this.skemaRows.length > 1) this.skemaRows = this.skemaRows.filter(r => r.id !== id); },
 
-                        konsekuensiRows: [{ id: 1 }],
-                        addKonsekuensiRow() { this.konsekuensiRows.push({ id: Date.now() }); },
+                        konsekuensiRows: [
+                            { id: 1, text: "Rekomendasi peringkat hasil kerja akan kurang apabila tidak sesuai dengan ekspektasi" },
+                        ],
+                        addKonsekuensiRow() { this.konsekuensiRows.push({ id: Date.now(), text: "" }); },
                         removeKonsekuensiRow(id) { if (this.konsekuensiRows.length > 1) this.konsekuensiRows = this.konsekuensiRows.filter(r => r.id !== id); },
 
                         get isValidSetup() { return this.pegawaiId !== "" && this.periodeId !== "" && this.penilaiId !== "" && this.atasanId !== ""; }
@@ -430,7 +439,7 @@
                                                         placeholder="1. Tuliskan Ukuran keberhasilan/ Indikator Kinerja Individu" 
                                                         :disabled="!showRow"
                                                         @if($parent->kategori == 'jabatan')
-                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? ('Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya | Jabatan ' + pegawaiJabatan) : 'Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya'"
+                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI) + @json(' | Jabatan ') + pegawaiJabatan : @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI)"
                                                         @endif
                                                         required>@if($parent->kategori != 'jabatan') @foreach($parent->children as $child){{ $loop->iteration }}. {{ trim($child->indikator_kinerja) }}. {{ trim($child->target_ekspektasi) }}&#13;&#10;@endforeach @endif</textarea>
                                                 </td>
@@ -523,7 +532,7 @@
                                                 <td class="text-center font-bold w-12 align-top pt-4" x-text="index + 1"></td>
                                                 <td colspan="3" class="align-top relative p-0">
                                                     <div class="p-3">
-                                                        <textarea name="dukungan[]" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Dukungan Sumber Daya..."></textarea>
+                                                        <textarea name="dukungan[]" x-model="row.text" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Dukungan Sumber Daya..."></textarea>
                                                     </div>
                                                     <button x-show="dukunganRows.length > 1" type="button" @click="removeDukunganRow(row.id)" class="absolute top-4 right-4 px-2 py-1 bg-red-100 text-red-600 rounded shadow-sm text-xs font-bold hover:bg-red-200 opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus Baris Ini">
                                                         <i class="fas fa-trash-alt mr-1"></i> Hapus
@@ -547,7 +556,7 @@
                                                 <td class="text-center font-bold w-12 align-top pt-4" x-text="index + 1"></td>
                                                 <td colspan="3" class="align-top relative p-0">
                                                     <div class="p-3">
-                                                        <textarea name="skema[]" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Skema Pertanggungjawaban..."></textarea>
+                                                        <textarea name="skema[]" x-model="row.text" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Skema Pertanggungjawaban..."></textarea>
                                                     </div>
                                                     <button x-show="skemaRows.length > 1" type="button" @click="removeSkemaRow(row.id)" class="absolute top-4 right-4 px-2 py-1 bg-red-100 text-red-600 rounded shadow-sm text-xs font-bold hover:bg-red-200 opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus Baris Ini">
                                                         <i class="fas fa-trash-alt mr-1"></i> Hapus
@@ -571,7 +580,7 @@
                                                 <td class="text-center font-bold w-12 align-top pt-4" x-text="index + 1"></td>
                                                 <td colspan="3" class="align-top relative p-0">
                                                     <div class="p-3">
-                                                        <textarea name="konsekuensi[]" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Konsekuensi..."></textarea>
+                                                        <textarea name="konsekuensi[]" x-model="row.text" :required="index === 0" class="w-full border-b border-dashed border-gray-300 focus:border-blue-500 bg-transparent resize-none outline-none font-semibold text-gray-800 pb-2 mb-3" rows="2" placeholder="Tuliskan Konsekuensi..."></textarea>
                                                     </div>
                                                     <button x-show="konsekuensiRows.length > 1" type="button" @click="removeKonsekuensiRow(row.id)" class="absolute top-4 right-4 px-2 py-1 bg-red-100 text-red-600 rounded shadow-sm text-xs font-bold hover:bg-red-200 opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus Baris Ini">
                                                         <i class="fas fa-trash-alt mr-1"></i> Hapus

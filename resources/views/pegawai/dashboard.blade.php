@@ -17,7 +17,7 @@
 
             {{-- Info Biodata --}}
             <div class="flex-1 w-full">
-                <h2 class="text-2xl font-bold text-gray-800 mb-1">Selamat Datang, {{ $user->profile->nama_lengkap ?? $user->name }}! 👋</h2>
+                <h2 class="text-2xl font-bold text-gray-800 mb-1">{{ $user->profile->nama_lengkap ?? $user->name }}</h2>
                 <p class="text-blue-600 font-semibold mb-6">
                     {{ $user->getRoleNames()->first() ?? 'Staff Kependidikan' }}
                     @if($user->profile->unit_kerja) — {{ $user->profile->unit_kerja }} @endif

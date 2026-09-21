@@ -7,7 +7,7 @@
 
     @section('content')
         <div class="p-6" x-data="{ activeTab: 'skp' }">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-6 no-print">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800">Detail Target SKP Dosen Kualitatif</h1>
                 </div>
@@ -16,11 +16,14 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
+                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
+                        <i class="fas fa-print mr-2"></i> Print
+                    </button>
                 </div>
             </div>
 
 
-            <div class="flex space-x-1 mb-4 border-b border-gray-200">
+            <div class="flex space-x-1 mb-4 border-b border-gray-200 no-print">
                 <button type="button" @click="activeTab = 'skp'" :class="{'border-b-2 border-blue-500 text-blue-600': activeTab === 'skp', 'text-gray-500 hover:text-gray-700': activeTab !== 'skp'}" class="px-4 py-2 font-bold text-sm uppercase tracking-wide">
                     SKP Pegawai
                 </button>
@@ -52,6 +55,17 @@
                     background: transparent;
                     font-family: inherit;
                     font-size: 13px;
+                }
+
+                @media print {
+                    .print-area > div[x-show] { display: block !important; }
+                    .print-area [x-cloak] { display: block !important; }
+                    .print-area form,
+                    .print-area input,
+                    .print-area textarea,
+                    .print-area select,
+                    .print-area button { display: none !important; }
+                    .print-area > div { border: none !important; box-shadow: none !important; }
                 }
             </style>
 
@@ -164,20 +178,19 @@
                         <tr class="bg-light-gray">
                             <td colspan="4" class="font-bold">PERILAKU KERJA*</td>
                         </tr>
-                        @foreach($perilakuAcuan as $idx => $parent)
+                        {{-- Dari snapshot rows skp_kualitatif_perilakus (terkunci saat SKP dibuat),
+                             BUKAN master Acuan live — konsisten dgn dosen & penilai evaluasi.
+                             Parent Acuan baru setelah SKP dibuat tidak lagi tampil sbg ghost row "-". --}}
+                        @foreach($perilakus as $idx => $perilaku)
                         <tr>
                             <td class="text-center font-bold w-12 align-top">{{ $idx + 1 }}</td>
                             <td colspan="2" class="align-top">
-                                <div class="font-bold mb-1">{{ $parent->sasaran_kinerja }}</div>
-                                <ul class="list-none pl-0 m-0 text-gray-700">
-                                    @foreach($parent->children as $child)
-                                    <li>- {{ trim($child->indikator_kinerja) }}</li>
-                                    @endforeach
-                                </ul>
+                                <div class="font-bold mb-1 {{ strtolower($perilaku->aspek) == 'kepemimpinan' ? 'italic' : '' }}">{{ $perilaku->aspek }}</div>
+                                <div class="whitespace-pre-wrap text-gray-700 pl-4">{!! nl2br(e($perilaku->indikator)) !!}</div>
                             </td>
                             <td class="align-top">
                                 <div class="font-bold mb-1">Ekspektasi Khusus Pimpinan:</div>
-                                <div class="whitespace-pre-wrap">{{ $perilakus->where("aspek", $parent->sasaran_kinerja)->first()->ekspektasi_pimpinan ?? "-" }}</div>
+                                <div class="whitespace-pre-wrap">{{ $perilaku->ekspektasi_pimpinan ?? "-" }}</div>
                             </td>
                         </tr>
                         @endforeach
@@ -250,7 +263,7 @@
 
             <!-- Tombol Aksi Approval -->
             @if(in_array($header->status, ['Draft', 'Diajukan', 'Target Diajukan', 'Revisi']))
-            <div class="mt-8 bg-white p-6 border border-gray-200 rounded-xl shadow-sm">
+            <div class="mt-8 bg-white p-6 border border-gray-200 rounded-xl shadow-sm no-print">
                 <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Keputusan Approval</h3>
                 <div class="flex gap-4">
                     <form action="{{ route('penilai.approval-skp-dosen-kualitatif.approve', $header->id) }}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menyetujui target SKP ini?')">

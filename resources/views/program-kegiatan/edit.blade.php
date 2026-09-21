@@ -93,7 +93,7 @@
     }
 </style>
 
-<div x-data="programManager()" class="w-full mx-auto pb-20 px-4 md:px-6">
+<div x-data="programManager(@json($prodis), @json($initialData), @js($periodeAnggaran))" class="w-full mx-auto pb-20 px-4 md:px-6">
     {{-- Header Section --}}
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
@@ -392,91 +392,5 @@
             e.preventDefault();
         }
     }
-
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('programManager', () => {
-            const prodisData = @json($prodis);
-            const initialData = @json($initialData);
-            const periodeData = @js($periodeAnggaran);
-
-            // Pastikan alokasi_custom adalah object dan memiliki semua prodi
-            if (initialData && initialData.length > 0) {
-                initialData.forEach(item => {
-                    if (!item.alokasi_custom || Array.isArray(item.alokasi_custom) || typeof item.alokasi_custom !== 'object') {
-                        let objCustom = {};
-                        prodisData.forEach(p => objCustom[p] = 0);
-                        item.alokasi_custom = objCustom;
-                    } else {
-                        // Pastikan semua prodi ada di dalam object (jika ada prodi baru)
-                        prodisData.forEach(p => {
-                            if (item.alokasi_custom[p] === undefined) {
-                                item.alokasi_custom[p] = 0;
-                            }
-                        });
-                    }
-                });
-            }
-
-            return {
-                prodis: prodisData,
-                programs: initialData,
-                showCustomModal: false,
-                activeProgram: null,
-
-                openCustomModal(index) {
-                    this.activeProgram = this.programs[index];
-                    this.activeProgram.tipe_alokasi = 'Custom';
-                    this.showCustomModal = true;
-                },
-
-                closeCustomModal() {
-                    this.showCustomModal = false;
-                    this.activeProgram = null;
-                },
-
-                calculateAverage(program) {
-                    if (program.tipe_alokasi === 'Rata') {
-                        const total = parseFloat(program.anggaran_per_prodi) || 0;
-                        const count = this.prodis.length || 1;
-                        program.per_prodi = Math.round(total / count);
-                    }
-                },
-
-                getTotalCustom(program) {
-                    let total = 0;
-                    if(!program.alokasi_custom) return 0;
-                    for (const key in program.alokasi_custom) {
-                        total += Math.round(parseFloat(program.alokasi_custom[key]) || 0);
-                    }
-                    return total;
-                },
-
-                formatRupiah(number) {
-                    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(number);
-                },
-
-                formatCompact(number) {
-                    if (number >= 1000000) return (number / 1000000).toFixed(1) + ' jt';
-                    if (number >= 1000) return (number / 1000).toFixed(0) + ' rb';
-                    return number;
-                },
-
-                getFormattedYear() {
-                    const p = periodeData.find(x => x.id == this.programs[0].periode_id);
-                    if(!p) return '';
-                    const year = parseInt(p.tahun_anggaran);
-                    return `${year}/${year + 1}`;
-                }
-            }
-        });
-    });
-
-    document.addEventListener('wheel', function(event) {
-        if (document.activeElement.type === 'number') {
-            document.activeElement.blur();
-        }
-    }, {
-        passive: false
-    });
 </script>
 @endpush

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\PeriodeSkp;
+use App\Models\Prodi;
 use App\Models\SkpDosen;
 use App\Models\SkpHeader;
 use App\Models\SkpTendik;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule; // Pastikan Rule di-import
 use Carbon\Carbon;
 use Spatie\Permission\Models\Role;
+use App\Models\JenjangJabatan;
+use App\Models\PangkatGolongan;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\UsersImport;
 use App\Exports\UserTemplateExport;
@@ -32,9 +35,62 @@ class SuperAdminController extends Controller
     {
         $totalUsers = User::count();
         $totalPeriodeSkp = PeriodeSkp::count();
+        $totalProdi = Prodi::count();
+        $totalRole = Role::count();
+        $totalSkpDosen = SkpDosen::count();
+        $totalSkpTendik = SkpTendik::count();
+
+        // Breakdown status SKP
+        $skpStatuses = ['Draft', 'Diajukan', 'Pending Utama', 'Pending Akhir', 'Disetujui'];
+        $skpStatusCounts = [];
+        foreach ($skpStatuses as $status) {
+            $skpStatusCounts[$status] = SkpHeader::where('status', $status)->count();
+        }
+
+        // Distribusi user per role (top 10 berdasarkan jumlah user)
+        $rolesDist = Role::withCount('users')->orderByDesc('users_count')->limit(10)->get();
+
+        /*
+         * SPARKLINE / TREN HISTORIS
+         * ------------------------------------------------
+         * Saat ini HANYA "Total Users" yang diberi sparkline ($userTrend),
+         * karena tabel users punya created_at dengan variasi waktu nyata
+         * (user dibuat bertahap dari waktu ke waktu) sehingga tren kumulatif
+         * mingguan punya makna.
+         *
+         * 5 metrik berikut SENGAJA tidak diberi sparkline:
+         *   - Total Prodi      : dibuat serentak via seeder (created_at sama)
+         *   - Total Periode SKP: hanya 3 row, semua di awal Juli (data usang)
+         *   - Total Role        : dibuat serentak via seeder (created_at sama)
+         *   - Total SKP Dosen   : tabel masih kosong (count = 0)
+         *   - Total SKP Tendik  : tabel masih kosong (count = 0)
+         * Kelima metrik tersebut belum punya variasi data historis yang cukup,
+         * sehingga sparkline akan flat/kosong (tidak informatif).
+         *
+         * CATATAN PENGEMBANGAN KE DEPAN:
+         * Begitu data SKP Dosen / SKP Tendik (dan metrik lain) mulai terisi
+         * dari waktu ke waktu, sparkline serupa $userTrend bisa ditambahkan
+         * dengan pola query yang sama:
+         *   - hitung kumulatif mingguan via whereBetween('created_at', [...])
+         *     untuk N minggu terakhir, lalu masukkan ke compact() dan render
+         *     di canvas card terkait (lihat #sparkUsers di view).
+         * Tidak ada perubahan struktur diperlukan — cukup tambah variabel
+         * trend + canvas saat datanya sudah memadai.
+         */
+        // Sparkline Total Users: kumulatif mingguan 8 minggu terakhir (created_at asli)
+        $userTrend = [];
+        $cumulative = 0;
+        for ($i = 7; $i >= 0; $i--) {
+            $start = now()->subWeeks($i)->startOfWeek();
+            $end   = now()->subWeeks($i)->endOfWeek();
+            $cumulative += User::whereBetween('created_at', [$start, $end])->count();
+            $userTrend[] = $cumulative;
+        }
 
         return view('super-admin.dashboard', compact(
-            'totalUsers', 'totalPeriodeSkp',
+            'totalUsers', 'totalPeriodeSkp', 'totalProdi', 'totalRole',
+            'totalSkpDosen', 'totalSkpTendik',
+            'skpStatuses', 'skpStatusCounts', 'rolesDist', 'userTrend'
         ));
     }
 
@@ -242,19 +298,21 @@ class SuperAdminController extends Controller
         $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
+        $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
 
-        return view('super-admin.users.create', compact('jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional'));
+        return view('super-admin.users.create', compact('jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans'));
     }
 
     public function usersEdit(User $user)
     {
-        $user->load('profile');
+        $user->load(['profile', 'profile.pangkatGolongan.jenjangJabatan']);
 
         $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
+        $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
 
-        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional'));
+        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans'));
     }
 
     public function usersStore(Request $request)
@@ -267,7 +325,8 @@ class SuperAdminController extends Controller
             'roles_tendik.*' => 'exists:roles,name',
             'nama' => 'required|string|max:255',
             'nip' => 'required|string|max:20|unique:user_profiles,nip',
-            'pangkat_golongan' => 'nullable|string|max:100',
+            'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
+            'pangkat_golongan'    => 'nullable|string|max:100',
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
@@ -291,11 +350,21 @@ class SuperAdminController extends Controller
 
             $jabatanPekerjaanText = $request->role_utama ?? (is_array($request->roles_tendik) ? implode(', ', $request->roles_tendik) : 'Tenaga Kependidikan');
 
+            $pangkatGolonganId = null;
+            $pangkatGolonganString = $request->pangkat_golongan;
+
+            if ($request->filled('pangkat_golongan_id') && $request->pangkat_golongan_id !== 'manual') {
+                $pg = PangkatGolongan::find($request->pangkat_golongan_id);
+                $pangkatGolonganId = $pg->id;
+                $pangkatGolonganString = $pg->kode_pangkat;
+            }
+
             UserProfile::create([
                 'user_id' => $user->id,
                 'nama_lengkap' => $request->nama,
                 'nip' => $request->nip,
-                'pangkat_golongan' => $request->pangkat_golongan,
+                'pangkat_golongan' => $pangkatGolonganString,
+                'pangkat_golongan_id' => $pangkatGolonganId,
                 'jabatan_pekerjaan' => $jabatanPekerjaanText,
                 'jabatan_fungsional' => $request->jabatan_fungsional,
                 'unit_kerja' => $request->unit_kerja,
@@ -327,7 +396,8 @@ class SuperAdminController extends Controller
             'roles_tendik.*' => 'exists:roles,name',
             'nama' => 'required|string|max:255',
             'nip' => ['required', 'string', 'max:20', Rule::unique('user_profiles')->ignore($user->profile->id ?? null)],
-            'pangkat_golongan' => 'nullable|string|max:100',
+            'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
+            'pangkat_golongan'    => 'nullable|string|max:100',
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
@@ -349,12 +419,22 @@ class SuperAdminController extends Controller
 
             $jabatanPekerjaanText = $request->role_utama ?? (is_array($request->roles_tendik) ? implode(', ', $request->roles_tendik) : 'Tenaga Kependidikan');
 
+            $pangkatGolonganId = null;
+            $pangkatGolonganString = $request->pangkat_golongan;
+
+            if ($request->filled('pangkat_golongan_id') && $request->pangkat_golongan_id !== 'manual') {
+                $pg = PangkatGolongan::find($request->pangkat_golongan_id);
+                $pangkatGolonganId = $pg->id;
+                $pangkatGolonganString = $pg->kode_pangkat;
+            }
+
             UserProfile::updateOrCreate(
                 ['user_id' => $user->id],
                 [
                     'nama_lengkap' => $request->nama,
                     'nip' => $request->nip,
-                    'pangkat_golongan' => $request->pangkat_golongan,
+                    'pangkat_golongan' => $pangkatGolonganString,
+                    'pangkat_golongan_id' => $pangkatGolonganId,
                     'jabatan_pekerjaan' => $jabatanPekerjaanText,
                     'jabatan_fungsional' => $request->jabatan_fungsional,
                     'unit_kerja' => $request->unit_kerja,
@@ -1488,6 +1568,8 @@ class SuperAdminController extends Controller
             'selesai' => 'required|date|after:mulai',
             'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
             'batas_penilaian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
+            'label_triwulan' => 'nullable|string|max:50',
+            'label_periode_penilaian' => 'nullable|string|max:100',
             'status' => 'required|in:draft,aktif,selesai'
         ], [
             'tahun.unique' => 'Periode SKP dengan Tahun dan rentang tanggal pelaksanaan tersebut sudah pernah dibuat sebelumnya.',
@@ -1505,7 +1587,7 @@ class SuperAdminController extends Controller
         DB::beginTransaction();
         try {
             if (($validated['status'] ?? null) === 'aktif') {
-                PeriodeSkp::where('status', 'aktif')->update(['status' => 'selesai']);
+                PeriodeSkp::where('status', 'aktif')->where('tipe', $validated['tipe'])->update(['status' => 'selesai']);
             }
 
             PeriodeSkp::create($validated);
@@ -1546,6 +1628,8 @@ class SuperAdminController extends Controller
             'selesai' => 'required|date|after:mulai',
             'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
             'batas_penilaian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
+            'label_triwulan' => 'nullable|string|max:50',
+            'label_periode_penilaian' => 'nullable|string|max:100',
             'status' => 'required|in:draft,aktif,selesai'
         ], [
             'tahun.unique' => 'Gagal! Terdapat Periode SKP lain yang menggunakan Tahun dan rentang tanggal pelaksanaan yang persis sama.',
@@ -1565,7 +1649,7 @@ class SuperAdminController extends Controller
             if (($validated['status'] ?? null) === 'aktif') {
                 PeriodeSkp::where('status', 'aktif')
                     ->where('id', '!=', $periodeSkp->id)
-                    ->update(['status' => 'selesai']);
+                    ->where('tipe', $validated['tipe'])->update(['status' => 'selesai']);
             }
 
             $periodeSkp->update($validated);
@@ -1627,7 +1711,7 @@ class SuperAdminController extends Controller
             if ($request->status === 'aktif') {
                 PeriodeSkp::where('status', 'aktif')
                     ->where('id', '!=', $periodeSkp->id)
-                    ->update(['status' => 'selesai']);
+                    ->where('tipe', $periodeSkp->tipe)->update(['status' => 'selesai']);
             }
 
             $periodeSkp->update(['status' => $request->status]);
@@ -1649,4 +1733,23 @@ class SuperAdminController extends Controller
         if (!file_exists($fullPath)) abort(404);
         return response()->file($fullPath);
     }
+
+    public function settingsIndex()
+    {
+        $showSkpDosenKuantitatif = \App\Models\SystemSetting::getBool('show_skp_dosen_kuantitatif', true);
+        return view('super-admin.settings.index', compact('showSkpDosenKuantitatif'));
+    }
+
+    public function toggleSetting(Request $request)
+    {
+        $validated = $request->validate([
+            'key' => 'required|in:show_skp_dosen_kuantitatif',
+        ]);
+
+        $current = \App\Models\SystemSetting::getBool($validated['key'], true);
+        \App\Models\SystemSetting::setBool($validated['key'], !$current);
+
+        return back()->with('success', 'Pengaturan berhasil diperbarui.');
+    }
 }
+

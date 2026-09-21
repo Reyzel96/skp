@@ -39,6 +39,7 @@ Route::redirect('/', '/login');
 Route::middleware(['auth'])->group(function () {
     // Shared Lookup Routes
     Route::get('/lookup/daftar-tupoksi/bidang/{bidang}', [\App\Http\Controllers\SuperAdmin\DaftarTupoksiController::class, 'getByBidang'])->name('lookup.daftar-tupoksi.by-bidang');
+    Route::get('/lookup/pangkat-golongan/by-jenjang/{jenjang_jabatan_id}', [\App\Http\Controllers\SuperAdmin\PangkatGolonganController::class, 'byJenjang'])->name('lookup.pangkat-golongan.by-jenjang');
 
     Route::post('/keep-alive', function () {
         if (auth()->check()) {
@@ -226,9 +227,13 @@ Route::middleware(['auth', 'role:Super Admin', 'prevent-back'])->prefix('superad
         Route::put('/skp-dosen/{id}', 'skpDosenUpdate')->name('skp-dosen.update');
         Route::get('/skp-dosen/{id}/detail', 'skpDosenShow')->name('skp-dosen.show');
         Route::delete('/skp-dosen/reset/{id}', 'skpDosenDestroy')->name('skp-dosen.destroyAll');
+
+        Route::get('/settings', 'settingsIndex')->name('settings.index');
+        Route::post('/settings/toggle', 'toggleSetting')->name('settings.toggle');
     });
 
     // DAFTAR TUPOKSI (KAMUS)
+    Route::get('/daftar-tupoksi/template', [DaftarTupoksiController::class, 'downloadTemplate'])->name('daftar-tupoksi.template');
     Route::resource('daftar-tupoksi', DaftarTupoksiController::class);
     Route::post('/daftar-tupoksi/bulk-store', [DaftarTupoksiController::class, 'bulkStore'])->name('daftar-tupoksi.bulk-store');
     Route::get('/daftar-tupoksi/detail/{bidang}', [DaftarTupoksiController::class, 'showDetail'])->name('daftar-tupoksi.show-detail');
@@ -245,6 +250,10 @@ Route::middleware(['auth', 'role:Super Admin', 'prevent-back'])->prefix('superad
         Route::delete('/master-skp-tendik/{id}', 'destroy')->name('master-skp-tendik.destroy');
     });
 
+    // TODO (2026-09-09): Route acuan.store & acuan.destroy berikut menunjuk endpoint
+    // yang sudah dinonaktifkan (return 410) karena tabel skp_kualitatif_acuans tidak ada.
+    // Frontend (acuan.blade.php) tidak pernah memanggilnya. Aman dihapus permanen
+    // setelah log akses menunjukkan tidak ada pemanggil (cek laravel.log, response 410).
     Route::get('/skp-dosen-kualitatif-acuan', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'acuanSkp'])->name('skp-dosen-kualitatif.acuan');
     Route::post('/skp-dosen-kualitatif-acuan/update', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'updateAcuan'])->name('skp-dosen-kualitatif.acuan.update');
     Route::post('/skp-dosen-kualitatif-acuan/store', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'storeAcuan'])->name('skp-dosen-kualitatif.acuan.store');
@@ -255,6 +264,9 @@ Route::middleware(['auth', 'role:Super Admin', 'prevent-back'])->prefix('superad
     Route::delete('/skp-dosen-kualitatif-acuan/{id}', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'destroyAcuan'])->name('skp-dosen-kualitatif.acuan.destroy');
     Route::get('/skp-dosen-kualitatif-rumus', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'rumusHasil'])->name('skp-dosen-kualitatif.rumus');
     Route::post('/skp-dosen-kualitatif-rumus/update-pegawai', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'updateRumusPegawai'])->name('skp-dosen-kualitatif.rumus.update-pegawai');
+    // Sinkron Ulang Persyaratan Lampiran (preview + apply, manual sadder eksplisit)
+    Route::get('/skp-dosen-kualitatif/{header_id}/lampiran-sync/preview', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'previewSync'])->name('skp-dosen-kualitatif.lampiran-sync.preview');
+    Route::post('/skp-dosen-kualitatif/{header_id}/lampiran-sync/apply', [App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class, 'applySync'])->name('skp-dosen-kualitatif.lampiran-sync.apply');
     Route::resource('skp-dosen-kualitatif', App\Http\Controllers\SuperAdmin\SkpDosenKualitatifController::class);
 
     // MANAJEMEN PRODI

@@ -9,10 +9,25 @@ export default {
         './resources/views/**/*.blade.php',
     ],
 
+    safelist: [
+        'bg-[#DEE535]',
+        'bg-[#16BC2E]',
+        'text-slate-700',
+        'font-medium',
+        'hover:bg-[#DEE535]',
+        'hover:text-black',
+        'focus-visible:ring-[#16BC2E]/50',
+    ],
+
     theme: {
         extend: {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+            },
+            colors: {
+                'brand-lime': '#16BC2E',
+                'brand-yellow-green': '#DEE535',
+                'brand-green-dark': '#0F8420',
             },
         },
     },

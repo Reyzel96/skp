@@ -21,7 +21,7 @@ class SkpHeader extends Model
         'target_approved_at',
         'penilai_utama_id', 
         'penilai_akhir_id', 
-        'status', 'capaian_kinerja_organisasi', 
+        'status', 'capaian_kinerja_organisasi', 'predikat_kinerja',
         'catatan_penilai', 
         'approved_by_id'
     ];

@@ -454,6 +454,7 @@
                                                 <td colspan="3" class="align-top italic text-gray-800 relative group">
                                                     <input type="hidden" name="utama_rhk_pimpinan[]" :disabled="!showRow" value="">
                                                     <input type="hidden" name="utama_rhk[]" :disabled="!showRow" value="{{ $parent->sasaran_kinerja }}">
+                                                    <input type="hidden" name="utama_acuan_parent_id[]" :disabled="!showRow" value="{{ $parent->id }}">
                                                     {{ $parent->sasaran_kinerja }}
                                                     
                                                     @if($parent->kategori == 'jabatan')
@@ -475,7 +476,7 @@
                                                         placeholder="1. Tuliskan Ukuran keberhasilan/ Indikator Kinerja Individu" 
                                                         :disabled="!showRow"
                                                         @if($parent->kategori == 'jabatan')
-                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? ('Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya | Jabatan ' + pegawaiJabatan) : 'Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya'"
+                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI) + @json(' | Jabatan ') + pegawaiJabatan : @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI)"
                                                         @endif
                                                         required>{{ $savedParent ? $savedParent->indikator_target : $defaultIndikator }}</textarea>
                                                 </td>

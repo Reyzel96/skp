@@ -55,4 +55,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(SkpHeader::class, 'user_id');
     }
+
+    /**
+     * Nama fakultas user, diturunkan dari prodi -> fakultas.
+     * Fallback ke config statis bila prodi_id/fakultas_id belum ter-assign.
+     */
+    public function getFakultasNamaAttribute(): ?string
+    {
+        return $this->profile?->prodi?->fakultas?->nama
+            ?? config('institusi.nama_fakultas');
+    }
 }

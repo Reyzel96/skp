@@ -1,32 +1,32 @@
 <x-guest-layout>
-    <div class="mb-8 text-center">
-        <h2 class="text-lg font-bold text-gray-800">Selamat Datang Kembali</h2>
-        <p class="text-xs text-gray-500 font-medium">Silakan login untuk mengakses akun Anda</p>
+    <div class="text-center animate-fade-in-up" style="animation-delay: 0.6s;">
+        <h1 class="text-[25px] sm:text-[29px] leading-tight font-bold text-[#111827] tracking-tight">Selamat Datang Kembali</h1>
+        <p class="mt-1.5 sm:mt-2 text-[13.5px] sm:text-[15px] text-slate-400 font-medium">Silakan login untuk mengakses akun Anda</p>
     </div>
 
-    <!-- Session Status (default Laravel) -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    <!-- Session Status -->
+    <x-auth-session-status class="mt-6" :status="session('status')" />
 
-    <!-- 🔴 Tambahan: Notifikasi Error dari with('error') -->
+    <!-- Notifikasi Error -->
     @if(session('error'))
-        <div class="p-4 mb-6 text-xs text-red-800 rounded-2xl bg-red-50 border border-red-100 flex items-center gap-3 animate-pulse" role="alert">
-            <i class="fas fa-exclamation-circle text-base"></i>
+        <div class="mt-6 p-3.5 text-xs text-red-800 rounded-2xl bg-red-50 border border-red-100 flex items-center gap-3 animate-fade-in-up" style="animation-delay: 0.7s;" role="alert">
+            <i class="fas fa-exclamation-circle text-base shrink-0"></i>
             <span class="font-bold">Peringatan!</span> {{ session('error') }}
         </div>
     @endif
 
-    <form method="POST" action="{{ route('login') }}" class="space-y-6">
+    <form method="POST" action="{{ route('login') }}" class="mt-7 space-y-[22px] animate-fade-in-up" style="animation-delay: 0.8s;" x-data="{ loading: false }" @submit="loading = true">
         @csrf
 
-        <!-- Email Address -->
+        <!-- Email -->
         <div class="space-y-1.5">
-            <label for="email" class="text-[10px] font-black text-gray-700 uppercase tracking-widest ml-1">Email Address</label>
+            <label for="email" class="block text-[12px] font-semibold text-slate-500 uppercase tracking-[0.12em] ml-1">Email</label>
             <div class="relative group">
-                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-blue-600 transition-colors">
-                    <i class="fas fa-envelope"></i>
+                <div class="absolute inset-y-0 left-0 pl-[18px] flex items-center pointer-events-none text-slate-400 group-focus-within:text-brand-lime transition-colors duration-200">
+                    <i class="fas fa-envelope text-[14px]"></i>
                 </div>
                 <input id="email" type="email" name="email" :value="old('email')" required autofocus autocomplete="username"
-                    class="w-full bg-gray-50 border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-sm text-gray-900 transition-all placeholder:text-gray-400"
+                    class="w-full h-[58px] bg-[#F8FAFC] border border-slate-200 rounded-2xl pl-11 pr-4 focus:bg-white focus:ring-4 focus:ring-brand-lime/10 focus:border-brand-lime focus:outline-none font-semibold text-[14px] text-slate-900 transition-all duration-200 placeholder:text-slate-400/90 placeholder:font-normal placeholder:text-[13.5px]"
                     placeholder="nama@email.com">
             </div>
             <x-input-error :messages="$errors->get('email')" class="mt-1 ml-1" />
@@ -34,45 +34,57 @@
 
         <!-- Password -->
         <div class="space-y-1.5">
-            <div class="flex justify-between items-center px-1">
-                <label for="password" class="text-[10px] font-black text-gray-700 uppercase tracking-widest">Password</label>
+            <div class="flex justify-between items-center ml-1 mr-1">
+                <label for="password" class="text-[12px] font-semibold text-slate-500 uppercase tracking-[0.12em]">Password</label>
                 @if (Route::has('password.request'))
-                    <a class="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-widest transition-colors" href="{{ route('password.request') }}">
-                        Lupa?
+                    <a class="text-[12.5px] font-bold text-brand-green-dark hover:text-brand-lime tracking-wide transition-colors" href="{{ route('password.request') }}">
+                        Lupa password?
                     </a>
                 @endif
             </div>
             <div class="relative group" x-data="{ showPassword: false }">
-                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-blue-600 transition-colors">
-                    <i class="fas fa-lock"></i>
+                <div class="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-brand-lime transition-colors duration-200">
+                    <i class="fas fa-lock text-[14px]"></i>
                 </div>
                 <input id="password" type="password" :type="showPassword ? 'text' : 'password'" name="password" required autocomplete="current-password"
                     @blur="showPassword = false"
-                    class="w-full bg-gray-50 border-gray-100 rounded-2xl py-4 pl-12 pr-12 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-sm text-gray-900 transition-all placeholder:text-gray-400"
-                    placeholder="••••••••">
-                <button type="button" @mousedown.prevent @click="showPassword = !showPassword" class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 focus:outline-none transition-colors">
-                    <i class="fas" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                    class="w-full h-[58px] bg-[#F8FAFC] border border-slate-200 rounded-2xl pl-11 pr-11 focus:bg-white focus:ring-4 focus:ring-brand-lime/10 focus:border-brand-lime focus:outline-none font-semibold text-[14px] text-slate-900 transition-all duration-200 placeholder:text-slate-400/90 placeholder:font-normal placeholder:text-[13.5px]"
+                    placeholder="Masukkan password">
+                <button type="button" @mousedown.prevent @click="showPassword = !showPassword" class="absolute inset-y-0 right-0 pr-5 flex items-center text-slate-400 hover:text-brand-lime focus:outline-none transition-colors duration-200" aria-label="Tampilkan password">
+                    <i class="fas text-[14px]" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
                 </button>
             </div>
             <x-input-error :messages="$errors->get('password')" class="mt-1 ml-1" />
         </div>
 
         <!-- Remember Me -->
-        <div class="flex items-center justify-between px-1">
-            <label for="remember_me" class="inline-flex items-center cursor-pointer group">
-                <input id="remember_me" type="checkbox" name="remember" 
-                    class="rounded-lg border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 w-5 h-5 transition-all cursor-pointer">
-                <span class="ms-3 text-[11px] font-bold text-gray-600 group-hover:text-gray-900 transition-colors uppercase tracking-wider">Ingat Saya</span>
-            </label>
-        </div>
+        <label for="remember_me" class="inline-flex items-center cursor-pointer group ml-1">
+            <input id="remember_me" type="checkbox" name="remember"
+                class="rounded-[6px] border-slate-300 text-brand-lime focus:ring-brand-lime/40 focus:ring-offset-0 w-[18px] h-[18px] transition-all cursor-pointer">
+            <span class="ms-2.5 text-[13px] sm:text-[14px] font-medium text-slate-500 group-hover:text-slate-800 transition-colors">Ingat saya di perangkat ini</span>
+        </label>
 
-        <div>
-            <button type="submit" class="w-full bg-gray-900 hover:bg-black text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-gray-200 transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3 group">
+        <!-- Submit -->
+        <button type="submit" class="relative w-full h-[59px] rounded-[18px] font-bold text-[14px] uppercase tracking-[0.15em] text-white bg-gradient-to-r from-[#119675] to-[#2DBE68] shadow-lg shadow-[#119675]/30 transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[#119675]/40 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-3 group overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed disabled:translate-y-0 disabled:active:scale-100" :disabled="loading">
+            <span class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none"></span>
+            <span x-show="!loading" class="flex items-center gap-3">
                 Masuk ke Akun
-                <i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
-            </button>
-        </div>
+                <i class="fas fa-arrow-right text-[11px] group-hover:translate-x-1 transition-transform duration-200"></i>
+            </span>
+            <span x-show="loading" class="flex items-center gap-3">
+                <i class="fas fa-circle-notch fa-spin"></i>
+                Memproses...
+            </span>
+        </button>
     </form>
+
+    <!-- Footer Card -->
+    <div class="mt-5 pt-4 border-t border-slate-100 relative animate-fade-in-up" style="animation-delay: 0.9s;">
+        <div class="flex items-center justify-between">
+            <span class="text-[12.5px] italic font-medium text-slate-400">Berilmu • Berakhlak • Berkemajuan</span>
+            <span class="w-[58px] h-[2.5px] rounded-full bg-gradient-to-r from-brand-lime to-brand-yellow-green"></span>
+        </div>
+    </div>
 
     <script>
         // 1. Mencegah tampilan usang dari cache browser (Back-Forward Cache)
@@ -83,7 +95,6 @@
         });
 
         // 2. Auto-refresh halaman login secara berkala (sebelum session CSRF habis)
-        // Agar jika user meninggalkan tab di halaman login berjam-jam, token CSRF tetap valid.
         let csrfLifetime = {{ config('session.lifetime', 120) * 60 * 1000 }};
         setTimeout(function() {
             window.location.reload();

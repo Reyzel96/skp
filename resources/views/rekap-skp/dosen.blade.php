@@ -45,7 +45,7 @@
                     <tbody class="text-gray-900">
                         @forelse($rekap as $index => $item)
                             <tr class="hover:bg-blue-50 transition-colors border-b border-gray-200 {{ $item['header'] ? 'cursor-pointer' : '' }}"
-                                @if($item['header']) onclick="window.location='{{ route('penilai.evaluasi.show', $item['header']->id) }}'" @endif
+                                @if($item['header']) data-turbo-row="{{ route('penilai.evaluasi.show', $item['header']->id) }}" @endif
                                 title="{{ $item['header'] ? 'Klik untuk melihat rincian pekerjaan' : 'Pegawai belum mengisi SKP' }}">
                                 <td class="border border-gray-300 p-3 text-center font-bold text-gray-400">{{ $index + 1 }}</td>
                                 <td class="border border-gray-300 p-3">

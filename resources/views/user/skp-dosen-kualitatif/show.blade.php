@@ -152,6 +152,14 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
+                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
+                        <i class="fas fa-print mr-2"></i> Print
+                    </button>
+@if(strtolower($skpKualitatif->skpHeader->status ?? '') != 'draft' && !($isRealisasiSaved ?? false))
+                    <button type="button" @click="activeTab = 'evaluasi'; $nextTick(() => document.getElementById('formEvaluasiPegawai').requestSubmit())" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                        <i class="fas fa-save mr-2"></i> Simpan Realisasi
+                    </button>
+                    @endif
                 </div>
             </div>
 
@@ -196,6 +204,17 @@
                     font-size: 13px;
                 }
 
+                @media print {
+                    .print-area > div[x-show] { display: block !important; }
+                    .print-area [x-cloak] { display: block !important; }
+                    .print-area form,
+                    .print-area input,
+                    .print-area textarea,
+                    .print-area select,
+                    .print-area button { display: none !important; }
+                    .print-area .area-cetak,
+                    .print-area > div { border: none !important; box-shadow: none !important; }
+                }
                 </style>
 
             <div x-show="activeTab === 'skp'" class="area-cetak overflow-x-auto bg-white p-6 border border-gray-300 rounded-lg shadow-sm mb-6">
@@ -340,7 +359,7 @@
 
             <!-- EVALUASI PEGAWAI TAB -->
             <div x-show="activeTab === 'evaluasi'" x-cloak class="area-cetak overflow-x-auto bg-white p-6 border border-gray-300 rounded-lg shadow-sm mb-6">
-                <form action="{{ route('pegawai.skp-dosen-kualitatif.store-realisasi', $skpKualitatif->skpHeader->id ?? 1) }}" method="POST" enctype="multipart/form-data">
+                <form id="formEvaluasiPegawai" action="{{ route('pegawai.skp-dosen-kualitatif.store-realisasi', $skpKualitatif->skpHeader->id ?? 1) }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     <fieldset @if(strtolower($skpKualitatif->skpHeader->status ?? '') == 'draft') disabled @endif>
                 <div class="text-center font-bold mb-4 space-y-1">
@@ -350,7 +369,7 @@
                 </div>
                 <div class="flex justify-between font-bold mb-4 uppercase text-sm">
                     <div>UNIVERSITAS MUHAMMADIYAH SURABAYA</div>
-                    <div>PERIODE PENILAIAN: 1 Januari s.d. 31 Maret 2026</div>
+                    <div>PERIODE PENILAIAN: {{ $skpKualitatif->skpHeader->periode->periode_penilaian_label ?? '-' }}</div>
                 </div>
                 <!-- IDENTITAS -->
                 <table class="table-kualitatif mb-6">
@@ -393,16 +412,15 @@
                             <td class="text-center font-bold">5</td>
                             <td><span class="inline-block w-48 font-bold">UNIT KERJA</span> Universitas Muhammadiyah Surabaya</td>
                         </tr>
-                    </tbody>
-                </table>
+                </tbody>
+            </table>
 
-                @php $isRealisasiSaved = isset($realisasis) && $realisasis->count() > 0; @endphp
-                <table class="table-kualitatif mb-6 w-full">
+            <table class="table-kualitatif mb-6 w-full">
                     <tbody>
                         <tr>
                             <td class="p-4">
                                 <div class="mb-6">
-                                    <label class="font-bold text-sm block mb-2">CAPAIAN KINERJA ORGANISASI*</label>
+                                    <label class="font-bold text-sm block mb-2">PREDIKAT KINERJA PEGAWAI</label>
                                     <div class="w-full border border-gray-200 bg-gray-100 rounded-md shadow-inner text-gray-700 py-2 px-3 min-w-[200px]"
                                          x-text="predikatKinerja ? predikatKinerja : 'Belum dinilai oleh Penilai'">
                                     </div>
@@ -465,11 +483,29 @@
                         @endphp
                         @forelse($skpUtamas as $uIndex => $skpUtama)
                         @php
-                            // Ambil hanya child yang checkbox "Lampiran"-nya dicentang.
-                            // Tiap child ini = 1 kotak Upload Bukti terpisah.
-                            $utamaChildren = ($skpUtama->acuanParent && $skpUtama->acuanParent->children)
-                                ? $skpUtama->acuanParent->children->where('butuh_lampiran', true)->values()
-                                : collect();
+                            // Kotak upload = SNAPSHOT terkunci di skp_kualitatifs.lampiran_snapshot
+                            // (dikunci saat SKP dibuat/diedit/sinkron), BUKAN live dari master Acuan.
+                            // Konsisten dengan teks target yang juga snapshot. Fallback: row lama
+                            // tanpa snapshot & parent masih ada -> live (grandfathered).
+                            $snapshotItems = $skpUtama->lampiran_snapshot;
+                            if ($snapshotItems === null && $skpUtama->acuanParent && $skpUtama->acuanParent->children) {
+                                $utamaChildren = $skpUtama->acuanParent->children->where('butuh_lampiran', true)->values();
+                            } else {
+                                $utamaChildren = collect($snapshotItems ?? [])->map(function ($item) {
+                                    $label = $item['label'] ?? null;
+                                    if (!is_null($item['child_id'] ?? null)) {
+                                        $child = \App\Models\SkpKualitatifAcuanChild::find($item['child_id']);
+                                        if ($child) {
+                                            return (object) [
+                                                'id' => $child->id,
+                                                'indikator_kinerja' => $child->indikator_kinerja,
+                                                'label_lampiran' => $label,
+                                            ];
+                                        }
+                                    }
+                                    return (object) ['id' => $item['child_id'] ?? null, 'indikator_kinerja' => '', 'label_lampiran' => $label];
+                                })->values();
+                            }
                         @endphp
                         <tr x-data="{
                             hasilKerjaMap: {
@@ -702,8 +738,10 @@
                                 // Ambil acuan parent yang cocok dengan aspek indikator ini,
                                 // lalu filter hanya child (sub-indikator) yang checkbox "Lampiran"-nya
                                 // dicentang. Tiap child = 1 kotak Upload Bukti terpisah (pola section A).
+                                // Matching dinormalisasi (trim + mb_strtolower) agar tidak gagal
+                                // saat sasaran_kinerja master diedit kapitalisasi/spasi-nya.
                                 $perilakuChildren = collect();
-                                $acuanForAspek = $perilakuAcuan->where('sasaran_kinerja', $perilaku->aspek)->first();
+                                $acuanForAspek = $perilakuAcuan->first(fn($p) => trim(mb_strtolower($p->sasaran_kinerja ?? '')) === trim(mb_strtolower($perilaku->aspek ?? '')));
                                 if ($acuanForAspek && $acuanForAspek->children) {
                                     $perilakuChildren = $acuanForAspek->children->where('butuh_lampiran', true)->values();
                                 }
@@ -789,12 +827,15 @@
 </tbody>
                 </table>
                 </fieldset>
-                @if(strtolower($skpKualitatif->skpHeader->status ?? '') != 'draft' && !$isRealisasiSaved)
-                <div class="mt-6 flex justify-end">
+                @if(false)
                     <button type="submit" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
                         <i class="fas fa-save mr-2"></i> Simpan Realisasi Evaluasi
                     </button>
-                </div>
+                @endif
+                @if(false)
+                    <button type="submit" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                        <i class="fas fa-save mr-2"></i> Simpan Realisasi Evaluasi
+                    </button>
                 @endif
                 </form>
             </div>
@@ -858,14 +899,6 @@
                         @endforelse
                     </tbody>
                 </table>
-                
-                @if(strtolower($skpKualitatif->skpHeader->status ?? '') != 'draft')
-                <div class="mt-6 flex justify-end">
-                    <button type="button" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-                        <i class="fas fa-save mr-2"></i> Simpan Realisasi
-                    </button>
-                </div>
-                @endif
             </div>
         
             <!-- DOKUMEN EVALUASI TAB -->
@@ -876,12 +909,12 @@
                 </div>
                 <div class="flex justify-between font-bold mb-4 uppercase text-sm">
                     <div>
-                        <p>PERIODE: TRIWULAN I</p>
-                        <p>NAMA FAKULTAS (TIDAK DISINGKAT)</p>
+                        <p>PERIODE: {{ $skpKualitatif->skpHeader->periode->triwulan_label ?? '-' }}</p>
+                        <p>{{ $skpKualitatif->skpHeader->user->fakultas_nama ?? config('institusi.nama_fakultas') }}</p>
                     </div>
                     <div class="text-right">
                         <p>PERIODE PENILAIAN:</p>
-                        <p>1 JANUARI S.D. 31 MARET TAHUN 2026</p>
+                        <p>{{ $skpKualitatif->skpHeader->periode->periode_penilaian_label ?? '-' }}</p>
                     </div>
                 </div>
 
@@ -988,7 +1021,7 @@
                         </tr>
                         <tr>
                             <td></td>
-                            <td class="font-bold">CAPAIAN KINERJA ORGANISASI</td>
+                            <td class="font-bold">CAPAIAN KINERJA ORGANISASI (KATEGORI DISTRIBUSI)</td>
                             <td x-text="capaianKinerja ? capaianKinerja.toUpperCase() : '-'"></td>
                         </tr>
                         <tr>

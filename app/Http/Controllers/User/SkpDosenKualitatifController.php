@@ -42,6 +42,7 @@ class SkpDosenKualitatifController extends Controller
         // sama persis dengan pola section A. UTAMA.
         $perilakuAcuan = \App\Models\SkpKualitatifAcuanParent::where('kategori', 'perilaku')->with('children')->get();
         $realisasis = \App\Models\SkpKualitatifRealisasi::where('skp_header_id', $id)->get();
+        $isRealisasiSaved = $realisasis->count() > 0;
 
         $defaultDistribusiNilai = [
             'Istimewa' => [0, 1, 20, 158, 542],
@@ -59,7 +60,7 @@ class SkpDosenKualitatifController extends Controller
 
         $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $id)->where('jenis', 'utama')->with('acuanParent.children')->get();
 
-        return view('user.skp-dosen-kualitatif.show', compact('skpKualitatif', 'skpUtamas', 'tambahans', 'perilakus', 'lampirans', 'distribusiNilai', 'hasilKerja', 'user', 'penilai', 'realisasis', 'perilakuAcuan'));
+        return view('user.skp-dosen-kualitatif.show', compact('skpKualitatif', 'skpUtamas', 'tambahans', 'perilakus', 'lampirans', 'distribusiNilai', 'hasilKerja', 'user', 'penilai', 'realisasis', 'perilakuAcuan', 'isRealisasiSaved'));
     }
 
     public function storeRealisasi(Request $request, $id)
@@ -96,14 +97,30 @@ class SkpDosenKualitatifController extends Controller
             // Label lampiran kustom yang diketik dosen (per sub-indikator/realisasi).
             $labelData = $request->input('label_realisasi', []);
 
-            // Note: Since the UI doesn't dynamically load existing data yet, we'll append or just clear and insert.
-            // Let's clear existing realisasi for this header first to prevent duplicates if they save multiple times.
+            // Guard: jika tidak ada data realisasi di request (field terkunci/disabled tidak terkirim),
+            // jangan hapus data lama — batalkan untuk mencegah kehilangan data.
+            if (empty($realisasiData)) {
+                return redirect()->back()->with('error', 'Tidak ada data realisasi untuk disimpan. Data sebelumnya tetap utuh.');
+            }
+
+            // Hapus (beserta file bukti dukung) HANYA untuk section yang ada dan tidak kosong di request.
+            // target_type row DB memetakan langsung ke section: 'utama','tambahan','perilaku'.
+            // Section yang absen di request dibiarkan utuh agar tidak kehilangan data.
+            $sectionsInRequest = [];
+            foreach (['utama', 'tambahan', 'perilaku'] as $section) {
+                if (!empty($realisasiData[$section])) {
+                    $sectionsInRequest[$section] = true;
+                }
+            }
+
             $existing = \App\Models\SkpKualitatifRealisasi::where('skp_header_id', $id)->get();
             foreach ($existing as $ex) {
-                if ($ex->bukti_dukung_url && file_exists(public_path($ex->bukti_dukung_url))) {
-                    @unlink(public_path($ex->bukti_dukung_url));
+                if (isset($sectionsInRequest[$ex->target_type])) {
+                    if ($ex->bukti_dukung_url && file_exists(public_path($ex->bukti_dukung_url))) {
+                        @unlink(public_path($ex->bukti_dukung_url));
+                    }
+                    $ex->delete();
                 }
-                $ex->delete();
             }
 
           // Process Utama (dinamis per child/sub-indikator yang dicentang "Lampiran")

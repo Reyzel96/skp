@@ -152,6 +152,9 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
+                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
+                        <i class="fas fa-print mr-2"></i> Print
+                    </button>
                 </div>
             </div>
 
@@ -194,6 +197,18 @@
                     background: transparent;
                     font-family: inherit;
                     font-size: 13px;
+                }
+
+                @media print {
+                    .print-area > div[x-show] { display: block !important; }
+                    .print-area [x-cloak] { display: block !important; }
+                    .print-area form,
+                    .print-area input,
+                    .print-area textarea,
+                    .print-area select,
+                    .print-area button { display: none !important; }
+                    .print-area .area-cetak,
+                    .print-area > div { border: none !important; box-shadow: none !important; }
                 }
             </style>
 
@@ -350,7 +365,7 @@
                 </div>
                 <div class="flex justify-between font-bold mb-4 uppercase text-sm">
                     <div>UNIVERSITAS MUHAMMADIYAH SURABAYA</div>
-                    <div>PERIODE PENILAIAN: 1 Januari s.d. 31 Maret 2026</div>
+                    <div>PERIODE PENILAIAN: {{ $skpKualitatif->skpHeader->periode->periode_penilaian_label ?? '-' }}</div>
                 </div>
                 <!-- IDENTITAS -->
                 <table class="table-kualitatif mb-6">
@@ -401,7 +416,7 @@
                         <tr>
                             <td class="p-4">
                                 <div class="mb-6">
-                                    <label class="font-bold text-sm block mb-2">CAPAIAN KINERJA ORGANISASI*</label>
+                                    <label class="font-bold text-sm block mb-2">PREDIKAT KINERJA PEGAWAI</label>
                                     <div class="w-full border border-gray-200 bg-gray-100 rounded-md shadow-inner text-gray-700 py-2 px-3 min-w-[200px]"
                                          x-text="predikatKinerja ? predikatKinerja : 'Belum dinilai oleh Penilai'">
                                     </div>
@@ -463,9 +478,28 @@
                         @endphp
                         @forelse($skpUtamas as $uIndex => $skpUtama)
                             @php
-                                $utamaChildren = ($skpUtama->acuanParent && $skpUtama->acuanParent->children)
-                                    ? $skpUtama->acuanParent->children->where('butuh_lampiran', true)->values()
-                                    : collect();
+                                // Kotak upload = SNAPSHOT (skp_kualitatifs.lampiran_snapshot),
+                                // bukan live dari master Acuan. Fallback live: row lama tanpa
+                                // snapshot & parent masih ada (grandfathered).
+                                $snapshotItems = $skpUtama->lampiran_snapshot;
+                                if ($snapshotItems === null && $skpUtama->acuanParent && $skpUtama->acuanParent->children) {
+                                    $utamaChildren = $skpUtama->acuanParent->children->where('butuh_lampiran', true)->values();
+                                } else {
+                                    $utamaChildren = collect($snapshotItems ?? [])->map(function ($item) {
+                                        $label = $item['label'] ?? null;
+                                        if (!is_null($item['child_id'] ?? null)) {
+                                            $child = \App\Models\SkpKualitatifAcuanChild::find($item['child_id']);
+                                            if ($child) {
+                                                return (object) [
+                                                    'id' => $child->id,
+                                                    'indikator_kinerja' => $child->indikator_kinerja,
+                                                    'label_lampiran' => $label,
+                                                ];
+                                            }
+                                        }
+                                        return (object) ['id' => $item['child_id'] ?? null, 'indikator_kinerja' => '', 'label_lampiran' => $label];
+                                    })->values();
+                                }
                             @endphp
                             <tr x-data="{
                                 hasilKerjaMap: {
@@ -659,8 +693,10 @@
                                 <div class="whitespace-pre-wrap">{{ $perilaku->ekspektasi_pimpinan ?? '-' }}</div>
                             </td>
                             @php
+                                // Matching dinormalisasi (trim + mb_strtolower) agar kotak upload
+                                // tidak hilang saat sasaran_kinerja master diedit kapitalisasi/spasi-nya.
                                 $perilakuChildren = collect();
-                                $acuanForAspek = $perilakuAcuan->where('sasaran_kinerja', $perilaku->aspek)->first();
+                                $acuanForAspek = $perilakuAcuan->first(fn($p) => trim(mb_strtolower($p->sasaran_kinerja ?? '')) === trim(mb_strtolower($perilaku->aspek ?? '')));
                                 if ($acuanForAspek && $acuanForAspek->children) {
                                     $perilakuChildren = $acuanForAspek->children->where('butuh_lampiran', true)->values();
                                 }
@@ -725,7 +761,7 @@
                 </table>
                 </fieldset>
                 @if(!in_array(strtolower($skpKualitatif->skpHeader->status ?? ''), ['draft', 'selesai']))
-                <div class="mt-6 flex flex-col sm:flex-row justify-end gap-3">
+                <div class="mt-6 flex flex-col sm:flex-row justify-end gap-3 no-print">
     <input type="hidden" name="status" id="skp_status_input" value="Draft">
     
     <button type="submit" onclick="document.getElementById('skp_status_input').value='Draft'" class="inline-flex items-center justify-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none">
@@ -811,12 +847,12 @@
                 </div>
                 <div class="flex justify-between font-bold mb-4 uppercase text-sm">
                     <div>
-                        <p>PERIODE: TRIWULAN I</p>
-                        <p>NAMA FAKULTAS (TIDAK DISINGKAT)</p>
+                        <p>PERIODE: {{ $skpKualitatif->skpHeader->periode->triwulan_label ?? '-' }}</p>
+                        <p>{{ $skpKualitatif->skpHeader->user->fakultas_nama ?? config('institusi.nama_fakultas') }}</p>
                     </div>
                     <div class="text-right">
                         <p>PERIODE PENILAIAN:</p>
-                        <p>1 JANUARI S.D. 31 MARET TAHUN 2026</p>
+                        <p>{{ $skpKualitatif->skpHeader->periode->periode_penilaian_label ?? '-' }}</p>
                     </div>
                 </div>
 
@@ -923,7 +959,7 @@
                         </tr>
                         <tr>
                             <td></td>
-                            <td class="font-bold">CAPAIAN KINERJA ORGANISASI</td>
+                            <td class="font-bold">CAPAIAN KINERJA ORGANISASI (KATEGORI DISTRIBUSI)</td>
                             <td x-text="capaianKinerja ? capaianKinerja.toUpperCase() : '-'"></td>
                         </tr>
                         <tr>
@@ -946,7 +982,7 @@
                     </tbody>
                 </table>
             @if(!in_array(strtolower($skpKualitatif->skpHeader->status ?? ''), ['draft', 'selesai']))
-            <div class="mt-6 flex flex-col sm:flex-row justify-end gap-3">
+            <div class="mt-6 flex flex-col sm:flex-row justify-end gap-3 no-print">
                 <button type="submit" form="evaluasi-form" onclick="document.getElementById('skp_status_input').value='Draft'" class="inline-flex items-center justify-center px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none">
                     <i class="fas fa-save mr-2"></i> Simpan Sementara
                 </button>

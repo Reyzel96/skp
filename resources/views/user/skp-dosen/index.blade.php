@@ -41,7 +41,7 @@
                         <tbody class="divide-y divide-gray-100">
                             @forelse($headers as $header)
                                 <tr class="hover:bg-emerald-50/50 transition-colors cursor-pointer group" 
-                                    onclick="window.location='{{ route('pegawai.skp-dosen.show', $header->id) }}'">
+                                    data-turbo-row="{{ route('pegawai.skp-dosen.show', $header->id) }}">
                                     <td class="px-6 py-4 text-center font-bold text-gray-400">{{ $loop->iteration }}</td>
                                     <td class="px-6 py-4">
                                         <div class="font-black text-emerald-800 uppercase tracking-tight">{{ $header->periode->nama_periode ?? '-' }}</div>

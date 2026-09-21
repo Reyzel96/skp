@@ -10,3 +10,5 @@ storage/*.log
 _backups-archive/
 public/uploads/
 *.sql
+
+/testing/

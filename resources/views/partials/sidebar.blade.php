@@ -12,7 +12,13 @@
     $isAdminKeuangan = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'admin keuangan') || str_contains(strtolower($n), 'keuangan fakultas'));
     $isKaprodi = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'kaprodi'));
     $isSekprodi = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'sekprodi'));
-    $isKepalaLab = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'kepala lab') || str_contains(strtolower($n), 'laboratorium'));
+    $isKepalaLab = $userRoles->contains(function ($n) {
+        $n = strtolower($n);
+        // 'Kepala UPF Laboratorium' adalah Kepala UPF, BUKAN Kepala Lab —
+        // cek 'kepala upf' dulu supaya tidak salah match kata 'laboratorium'.
+        if (str_contains($n, 'kepala upf') || str_contains($n, 'unit penunjang')) return false;
+        return str_contains($n, 'kepala lab') || str_contains($n, 'laboratorium');
+    });
     $isKepalaUPF = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'kepala upf') || str_contains(strtolower($n), 'unit penunjang'));
     $isDosen = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'dosen'));
     $isRektorat = $userRoles->contains(fn($n) => str_contains(strtolower($n), 'rektorat'));
@@ -25,6 +31,8 @@
     $showAnggaran = ($isDekan || $isWadek2 || $isAdminKeuangan || $isKaprodi || $isSekprodi || $isKepalaUPF || $isAdminProdi || $isRektorat) && !$isWadek1;
     $isUnitPengusul = ($isKaprodi || $isSekprodi || $isAdminProdi || $isKepalaUPF);
 
+    $showSkpDosenKuantitatif = \App\Models\SystemSetting::getBool('show_skp_dosen_kuantitatif', true);
+
     $dashRoute = 'dashboard';
     if ($isSuperAdmin) $dashRoute = 'superadmin.dashboard';
     elseif ($isRektorat) $dashRoute = 'rektorat.dashboard';
@@ -36,152 +44,220 @@
     elseif ($isKepalaUPF) $dashRoute = 'unitpenunjang.dashboard';
     elseif ($isAdminKeuangan) $dashRoute = 'adminkeuanganfakultas.dashboard';
     elseif ($isTendik) $dashRoute = 'pegawai.dashboard';
+    elseif ($isDosen) $dashRoute = 'pegawai.dashboard';
+
+    $name = $user->profile->nama_lengkap ?? $user->name ?? 'Guest';
+    $role = $user->getRoleNames()->first() ?? 'Staff';
+    $initials = mb_strtoupper(collect(explode(' ', $name))->map(fn($w) => mb_substr($w, 0, 1))->filter()->join(''));
+    $initials = mb_substr($initials, 0, 2);
 @endphp
 
-{{-- 1. DASHBOARD --}}
-<div class="mb-4">
-    <a href="{{ route($dashRoute) }}"
-       class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all {{ request()->routeIs('*.dashboard') ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-white/10 hover:text-white' }}">
-        <i class="fas fa-home w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-        <span x-show="sidebarOpen" x-transition>Dashboard</span>
-    </a>
+{{-- KARTU PROFIL USER --}}
+<div class="px-3 py-3 border-b border-gray-100 bg-white">
+    <div class="flex items-center gap-3" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? '' : 'justify-center'">
+        <div class="shrink-0 h-11 w-11 rounded-full bg-gradient-to-br from-brand-lime to-brand-green-dark flex items-center justify-center text-white font-bold text-sm select-none hover:scale-105 transition-transform duration-200 shadow-lg ring-2 ring-white/40" role="img" aria-label="Avatar {{ $name }}">
+            {{ $initials }}
+        </div>
+        <div class="min-w-0 flex-1" x-show="$store.sidebar.open || $store.sidebar.mobileOpen">
+            <p class="truncate text-sm font-semibold text-gray-800">{{ $name }}</p>
+            <p class="truncate text-xs text-gray-600">{{ $role }}</p>
+            <p class="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-500">
+                <span class="h-2 w-2 rounded-full bg-[#16BC2E] ring-2 ring-white animate-pulse"></span> Online
+            </p>
+        </div>
+    </div>
 </div>
 
-{{-- 2. AREA SUPER ADMIN --}}
-@if($isSuperAdmin)
-    <div class="mb-4">
-        <p x-show="sidebarOpen" x-transition class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Manajemen Sistem</p>
-        <div class="space-y-0.5">
-            <a href="{{ route('superadmin.users.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.users.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-users w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Kelola User</span>
-            </a>
-            <a href="{{ route('superadmin.prodi.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.prodi.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-university w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Kelola Prodi</span>
-            </a>
-            <a href="{{ route('superadmin.roles.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.roles.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-user-shield w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Kelola Jabatan</span>
-            </a>
-            <a href="{{ route('superadmin.periode-skp.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.periode-skp.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-calendar-alt w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Periode SKP</span>
-            </a>
-            <a href="{{ route('superadmin.daftar-tupoksi.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.daftar-tupoksi.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-book w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Daftar Tupoksi</span>
-            </a>
-        </div>
+{{-- NAVIGASI MENU --}}
+<nav class="flex-1 px-3 py-4 space-y-0 overflow-y-auto overflow-x-hidden" style="scrollbar-width: thin; scrollbar-color: rgba(22,188,46,0.2) transparent;" @click="$store.sidebar.closeMobile()">
+
+    {{-- 1. DASHBOARD --}}
+    <div class="mb-3">
+        <a href="{{ route($dashRoute) }}" data-route-pattern="*.dashboard" {{ request()->routeIs('*.dashboard') ? 'aria-current="page"' : '' }}
+           class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('*.dashboard') ? 'bg-[#16BC2E] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+            <i class="fas fa-home w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+            <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Dashboard</span>
+        </a>
     </div>
 
-    <div class="mb-4">
-        <p x-show="sidebarOpen" x-transition class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Generate SKP</p>
-        <div class="space-y-0.5">
-            <a href="{{ route('superadmin.master-skp-tendik.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.master-skp-tendik.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-copy w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>SKP Tendik</span>
-            </a>
-            <a href="{{ route('superadmin.skp-dosen.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.skp-dosen.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-chalkboard-teacher w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>SKP Dosen Kuantitatif</span>
-            </a>
-            <a href="{{ route('superadmin.skp-dosen-kualitatif.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('superadmin.skp-dosen-kualitatif.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-chalkboard w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>SKP Dosen Kualitatif</span>
-            </a>
+    {{-- 2. AREA SUPER ADMIN --}}
+    @if($isSuperAdmin)
+        <div class="mb-3">
+            <p x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="px-3 text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Manajemen Sistem</p>
+            <div class="space-y-0">
+                <a href="{{ route('superadmin.users.index') }}" data-route-pattern="superadmin.users.*" {{ request()->routeIs('superadmin.users.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.users.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-users w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Kelola User</span>
+                </a>
+                <a href="{{ route('superadmin.prodi.index') }}" data-route-pattern="superadmin.prodi.*" {{ request()->routeIs('superadmin.prodi.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.prodi.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-university w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Kelola Prodi</span>
+                </a>
+                <a href="{{ route('superadmin.roles.index') }}" data-route-pattern="superadmin.roles.*" {{ request()->routeIs('superadmin.roles.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.roles.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-user-shield w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Kelola Jabatan</span>
+                </a>
+                <a href="{{ route('superadmin.periode-skp.index') }}" data-route-pattern="superadmin.periode-skp.*" {{ request()->routeIs('superadmin.periode-skp.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.periode-skp.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-calendar-alt w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Periode SKP</span>
+                </a>
+                <a href="{{ route('superadmin.daftar-tupoksi.index') }}" data-route-pattern="superadmin.daftar-tupoksi.*" {{ request()->routeIs('superadmin.daftar-tupoksi.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.daftar-tupoksi.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-book w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Daftar Tupoksi</span>
+                </a>
+            </div>
         </div>
-    </div>
-@endif
 
-{{-- 3. MANAJEMEN ANGGARAN --}}
-@if($showAnggaran)
-    <div class="mb-4">
-        <p x-show="sidebarOpen" x-transition class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Anggaran & LPJ</p>
-        <div class="space-y-0.5">
-            @if($isAdminKeuangan)
-                <a href="{{ route('periode-anggaran.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('periode-anggaran.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                    <i class="fas fa-calendar-check w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                    <span x-show="sidebarOpen" x-transition>Periode Anggaran</span>
+        <div class="mb-3">
+            <p x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="px-3 text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Generate SKP</p>
+            <div class="space-y-0">
+                <a href="{{ route('superadmin.master-skp-tendik.index') }}" data-route-pattern="superadmin.master-skp-tendik.*" {{ request()->routeIs('superadmin.master-skp-tendik.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.master-skp-tendik.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-copy w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Tendik</span>
                 </a>
-            @endif
-            <a href="{{ route('program-kegiatan.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('program-kegiatan.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-database w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Program Fakultas</span>
-            </a>
-            @if($isUnitPengusul)
-                <a href="{{ route('kegiatan-prodi.my-pengajuan') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('kegiatan-prodi.my-pengajuan') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                    <i class="fas fa-paper-plane w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                    <span x-show="sidebarOpen" x-transition>Usulan Kegiatan Prodi</span>
+                <a href="{{ route('superadmin.skp-dosen.index') }}" data-route-pattern="superadmin.skp-dosen.*" {{ request()->routeIs('superadmin.skp-dosen.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.skp-dosen.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-chalkboard-teacher w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Dosen Kuantitatif</span>
                 </a>
-                <a href="{{ route('lpj.my-lpj') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('lpj.my-lpj') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                    <i class="fas fa-file-invoice w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                    <span x-show="sidebarOpen" x-transition>LPJ Program Kegiatan</span>
+                <a href="{{ route('superadmin.skp-dosen-kualitatif.index') }}" data-route-pattern="superadmin.skp-dosen-kualitatif.*" {{ request()->routeIs('superadmin.skp-dosen-kualitatif.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.skp-dosen-kualitatif.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-chalkboard w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Dosen Kualitatif</span>
                 </a>
-            @else
-                <a href="{{ route('kegiatan-prodi.list-admin') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('kegiatan-prodi.list-admin') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                    <i class="fas fa-clipboard-check w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                    <span x-show="sidebarOpen" x-transition>Usulan Program Prodi</span>
+                <a href="{{ route('superadmin.settings.index') }}" data-route-pattern="superadmin.settings.*" {{ request()->routeIs('superadmin.settings.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('superadmin.settings.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-cog w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Pengaturan</span>
                 </a>
-                <a href="{{ route('lpj.monitoring') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('lpj.monitoring') || request()->routeIs('lpj.show') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                    <i class="fas fa-chart-line w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                    <span x-show="sidebarOpen" x-transition>Monitoring LPJ</span>
-                </a>
-            @endif
+            </div>
         </div>
-    </div>
-@endif
+    @endif
 
-{{-- 4. KINERJA & SDM --}}
-<div class="mb-4">
-    <p x-show="sidebarOpen" x-transition class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Kinerja & SDM</p>
-    <div class="space-y-0.5">
-        @if($isReviewer)
-            <a href="{{ route('penilai.approval-skp-tendik.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('penilai.approval-skp-tendik.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-clipboard-check w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Approval SKP Tendik</span>
-            </a>
-            <a href="{{ route('penilai.approval-skp-dosen-kualitatif.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('penilai.approval-skp-dosen-kualitatif.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-clipboard-list w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Approval SKP Kualitatif</span>
-            </a>
-            <a href="{{ route('dekan.persetujuan-skp') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('dekan.persetujuan-skp') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-file-signature w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Approval SKP Dosen</span>
-            </a>
-            <a href="{{ route('penilai.evaluasi.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('penilai.evaluasi.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-users-cog w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Penilaian SKP</span>
-            </a>
-        @endif
-
-        @if($showRekap)
-            <a href="{{ route('rekap-skp.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('rekap-skp.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                <i class="fas fa-list-alt w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                <span x-show="sidebarOpen" x-transition>Rekap SKP</span>
-            </a>
-        @endif
-
-        @if(!$isSuperAdmin)
-            <div class="mt-3 pt-3 border-t border-white/10">
-                <p x-show="sidebarOpen" x-transition class="px-3 text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">SKP Saya</p>
-                @if($isDosen || $isPimpinanFakultas || $isKaprodi || $isSekprodi || $isKepalaLab)
-                    <a href="{{ route('pegawai.skp-dosen.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('pegawai.skp-dosen.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                        <i class="fas fa-user-graduate w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                        <span x-show="sidebarOpen" x-transition>SKP Kuantitatif</span>
-                    </a>
-                    <a href="{{ route('pegawai.skp-dosen-kualitatif.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('pegawai.skp-dosen-kualitatif.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                        <i class="fas fa-chalkboard w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                        <span x-show="sidebarOpen" x-transition>SKP Kualitatif</span>
+    {{-- 3. MANAJEMEN ANGGARAN --}}
+    @if($showAnggaran)
+        <div class="mb-3">
+            <p x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="px-3 text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Anggaran & LPJ</p>
+            <div class="space-y-0">
+                @if($isAdminKeuangan)
+                    <a href="{{ route('periode-anggaran.index') }}" data-route-pattern="periode-anggaran.*" {{ request()->routeIs('periode-anggaran.*') ? 'aria-current="page"' : '' }}
+                       class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('periode-anggaran.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                        <i class="fas fa-calendar-check w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                        <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Periode Anggaran</span>
                     </a>
                 @endif
-                @if($isTendik || $isAdminKeuangan || $isKepalaUPF)
-                    <a href="{{ route('pegawai.skp-tendik.index') }}" class="flex items-center px-3 py-2 text-sm rounded-lg transition-all {{ request()->routeIs('pegawai.skp-tendik.*') ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/10' }}">
-                        <i class="fas fa-user-tie w-5 text-center" :class="sidebarOpen ? 'mr-3' : 'mx-auto'"></i> 
-                        <span x-show="sidebarOpen" x-transition>SKP Tendik</span>
+                <a href="{{ route('program-kegiatan.index') }}" data-route-pattern="program-kegiatan.*" {{ request()->routeIs('program-kegiatan.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('program-kegiatan.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-database w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Program Fakultas</span>
+                </a>
+                @if($isUnitPengusul)
+                    <a href="{{ route('kegiatan-prodi.my-pengajuan') }}" data-route-pattern="kegiatan-prodi.my-pengajuan" {{ request()->routeIs('kegiatan-prodi.my-pengajuan') ? 'aria-current="page"' : '' }}
+                       class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('kegiatan-prodi.my-pengajuan') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                        <i class="fas fa-paper-plane w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                        <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Usulan Kegiatan Prodi</span>
+                    </a>
+                    <a href="{{ route('lpj.my-lpj') }}" data-route-pattern="lpj.my-lpj" {{ request()->routeIs('lpj.my-lpj') ? 'aria-current="page"' : '' }}
+                       class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('lpj.my-lpj') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                        <i class="fas fa-file-invoice w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                        <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">LPJ Program Kegiatan</span>
+                    </a>
+                @else
+                    <a href="{{ route('kegiatan-prodi.list-admin') }}" data-route-pattern="kegiatan-prodi.list-admin" {{ request()->routeIs('kegiatan-prodi.list-admin') ? 'aria-current="page"' : '' }}
+                       class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('kegiatan-prodi.list-admin') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                        <i class="fas fa-clipboard-check w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                        <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Usulan Program Prodi</span>
+                    </a>
+                    <a href="{{ route('lpj.monitoring') }}" data-route-pattern="lpj.monitoring|lpj.show" {{ (request()->routeIs('lpj.monitoring') || request()->routeIs('lpj.show')) ? 'aria-current="page"' : '' }}
+                       class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ (request()->routeIs('lpj.monitoring') || request()->routeIs('lpj.show')) ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                        <i class="fas fa-chart-line w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                        <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Monitoring LPJ</span>
                     </a>
                 @endif
             </div>
-        @endif
+        </div>
+    @endif
+
+    {{-- 4. KINERJA & SDM --}}
+    <div class="mb-3">
+        <p x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="px-3 text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Kinerja & SDM</p>
+        <div class="space-y-0">
+            @if($isReviewer)
+                <a href="{{ route('penilai.approval-skp-tendik.index') }}" data-route-pattern="penilai.approval-skp-tendik.*" {{ request()->routeIs('penilai.approval-skp-tendik.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('penilai.approval-skp-tendik.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-clipboard-check w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Approval SKP Tendik</span>
+                </a>
+                <a href="{{ route('penilai.approval-skp-dosen-kualitatif.index') }}" data-route-pattern="penilai.approval-skp-dosen-kualitatif.*" {{ request()->routeIs('penilai.approval-skp-dosen-kualitatif.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('penilai.approval-skp-dosen-kualitatif.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-clipboard-list w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Approval SKP Kualitatif</span>
+                </a>
+                <a href="{{ route('dekan.persetujuan-skp') }}" data-route-pattern="dekan.persetujuan-skp" {{ request()->routeIs('dekan.persetujuan-skp') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('dekan.persetujuan-skp') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-file-signature w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Approval SKP Dosen</span>
+                </a>
+                <a href="{{ route('penilai.evaluasi.index') }}" data-route-pattern="penilai.evaluasi.*" {{ request()->routeIs('penilai.evaluasi.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('penilai.evaluasi.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-users-cog w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Penilaian SKP</span>
+                </a>
+            @endif
+
+            @if($showRekap)
+                <a href="{{ route('rekap-skp.index') }}" data-route-pattern="rekap-skp.*" {{ request()->routeIs('rekap-skp.*') ? 'aria-current="page"' : '' }}
+                   class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('rekap-skp.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                    <i class="fas fa-list-alt w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                    <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Rekap SKP</span>
+                </a>
+            @endif
+
+            @if(!$isSuperAdmin)
+                <div class="mt-3 pt-3 border-t border-gray-100">
+                    <p x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="px-3 text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">SKP Saya</p>
+                    @if($isDosen || $isPimpinanFakultas || $isKaprodi || $isSekprodi || $isKepalaLab)
+                        @if($showSkpDosenKuantitatif)
+                        <a href="{{ route('pegawai.skp-dosen.index') }}" data-route-pattern="pegawai.skp-dosen.*" {{ request()->routeIs('pegawai.skp-dosen.*') ? 'aria-current="page"' : '' }}
+                           class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('pegawai.skp-dosen.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                            <i class="fas fa-user-graduate w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                            <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Kuantitatif</span>
+                        </a>
+                        @endif
+                        <a href="{{ route('pegawai.skp-dosen-kualitatif.index') }}" data-route-pattern="pegawai.skp-dosen-kualitatif.*" {{ request()->routeIs('pegawai.skp-dosen-kualitatif.*') ? 'aria-current="page"' : '' }}
+                           class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('pegawai.skp-dosen-kualitatif.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                            <i class="fas fa-chalkboard w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                            <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Kualitatif</span>
+                        </a>
+                    @endif
+                    @if($isTendik || $isAdminKeuangan || $isKepalaUPF)
+                        <a href="{{ route('pegawai.skp-tendik.index') }}" data-route-pattern="pegawai.skp-tendik.*" {{ request()->routeIs('pegawai.skp-tendik.*') ? 'aria-current="page"' : '' }}
+                           class="group flex items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm transition-all {{ request()->routeIs('pegawai.skp-tendik.*') ? 'bg-[#DEE535] text-slate-700 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' : 'text-slate-700 hover:bg-[#DEE535] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50' }}">
+                            <i class="fas fa-user-tie w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i> 
+                            <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">SKP Tendik</span>
+                        </a>
+                    @endif
+                </div>
+            @endif
+        </div>
     </div>
-</div>
+
+    {{-- LOG OUT --}}
+    <div class="mt-4 px-3 pb-4 pt-4 border-t border-gray-100">
+        <form method="POST" action="{{ route('logout') }}" id="logout-form" onsubmit="return confirm('Apakah Anda yakin ingin keluar dari sistem?')">
+            @csrf
+            <button type="submit"
+                class="group flex w-full items-center gap-3 px-4 py-2.5 mb-1.5 rounded-xl text-sm font-medium transition-all text-slate-700 hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16BC2E]/50">
+                <i class="fas fa-power-off w-5 text-center shrink-0 transition-transform duration-150 group-hover:scale-105" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'mr-3' : 'mx-auto'"></i>
+                <span x-show="$store.sidebar.open || $store.sidebar.mobileOpen" class="truncate">Keluar</span>
+            </button>
+        </form>
+    </div>
+
+</nav>

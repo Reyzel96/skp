@@ -87,7 +87,7 @@
                         <tbody class="divide-y align-top">
                             @forelse($waitingList as $pengajuan)
                                 <tr class="hover:bg-blue-50/40 transition-colors cursor-pointer group"
-                                    onclick="window.location='{{ route('kegiatan-prodi.show', $pengajuan->id) }}'">
+                                    data-turbo-row="{{ route('kegiatan-prodi.show', $pengajuan->id) }}">
                                     <td class="px-4 py-4">
                                         <div class="flex flex-col">
                                             <span class="font-black text-gray-900 uppercase text-[10px] tracking-tight">Kaprodi {{ $pengajuan->prodi->nama ?? '-' }}</span>
@@ -208,7 +208,7 @@
                         <tbody class="divide-y align-top">
                             @forelse($historyList as $pengajuan)
                                 <tr class="hover:bg-gray-50 transition-colors cursor-pointer group"
-                                    onclick="window.location='{{ route('kegiatan-prodi.show', $pengajuan->id) }}'">
+                                    data-turbo-row="{{ route('kegiatan-prodi.show', $pengajuan->id) }}">
                                     <td class="px-4 py-4">
                                         <div class="flex flex-col">
                                             <span class="font-black text-gray-900 uppercase text-[10px] tracking-tight">Kaprodi {{ $pengajuan->prodi->nama ?? '-' }}</span>

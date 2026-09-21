@@ -189,7 +189,7 @@
                         <tbody class="bg-white divide-y divide-gray-200 text-sm">
                             @forelse($pengajuanList as $pengajuan)
                             <tr class="hover:bg-blue-50/40 transition-colors cursor-pointer group"
-                                onclick="window.location='{{ route('kegiatan-prodi.show', $pengajuan->id) }}'">
+                                data-turbo-row="{{ route('kegiatan-prodi.show', $pengajuan->id) }}">
                                 <td class="px-4 py-4 align-top">
                                     <div class="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{{ $pengajuan->programKegiatan?->nama_kegiatan ?? '⚠️ Program Master Telah Dihapus' }}</div>
                                     <div class="text-xs text-blue-600 font-medium mt-1">{{ $pengajuan->programKegiatan?->nama_program ?? '-' }}</div>

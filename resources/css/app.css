@@ -7,3 +7,13 @@ input::-ms-reveal,
 input::-ms-clear {
     display: none;
 }
+
+/* Hormati prefers-reduced-motion: matikan semua transisi/animasi di sidebar */
+@media (prefers-reduced-motion: reduce) {
+    #sidebar *,
+    #sidebar * {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition: none !important;
+    }
+}

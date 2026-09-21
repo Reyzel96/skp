@@ -13,7 +13,7 @@ class PeriodeSkp extends Model
 
     protected $fillable = [
         'tahun', 'tipe', 'semester', 'bulan', 'bulan_akhir', 'semester_genap', 'semester_gasal', 'mulai', 'selesai',
-        'batas_pengisian', 'batas_penilaian', 'status'
+        'batas_pengisian', 'batas_penilaian', 'status', 'label_triwulan', 'label_periode_penilaian'
     ];
 
     protected $casts = [
@@ -57,5 +57,46 @@ class PeriodeSkp extends Model
             return "Tahun {$this->tahun} : Bulan {$startMonth}{$endMonth}";
         }
         return "Tahun {$this->tahun}";
+    }
+
+    // Label Triwulan (I-IV) dihitung otomatis dari bulan mulai.
+    // Admin bisa override lewat kolom label_triwulan (kosong = auto).
+    public function getTriwulanLabelAttribute(): string
+    {
+        if (!empty($this->label_triwulan)) {
+            return $this->label_triwulan;
+        }
+
+        if (!$this->mulai) {
+            return '-';
+        }
+
+        $month = (int) \Carbon\Carbon::parse($this->mulai)->month;
+        $roman = match (true) {
+            $month >= 1 && $month <= 3 => 'I',
+            $month >= 4 && $month <= 6 => 'II',
+            $month >= 7 && $month <= 9 => 'III',
+            default => 'IV',
+        };
+
+        return 'Triwulan ' . $roman;
+    }
+
+    // Teks "PERIODE PENILAIAN" (rentang tanggal kalender murni: tgl 1 s.d. akhir bulan).
+    // Admin bisa override lewat kolom label_periode_penilaian (kosong = auto).
+    public function getPeriodePenilaianLabelAttribute(): string
+    {
+        if (!empty($this->label_periode_penilaian)) {
+            return $this->label_periode_penilaian;
+        }
+
+        if (!$this->mulai || !$this->selesai) {
+            return '-';
+        }
+
+        $mulai = \Carbon\Carbon::parse($this->mulai)->startOfMonth()->locale('id');
+        $selesai = \Carbon\Carbon::parse($this->selesai)->endOfMonth()->locale('id');
+
+        return $mulai->translatedFormat('j F Y') . ' s.d. ' . $selesai->translatedFormat('j F Y');
     }
 }
