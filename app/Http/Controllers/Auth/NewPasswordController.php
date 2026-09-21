@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
@@ -58,6 +59,9 @@ class NewPasswordController extends Controller
         ])->save();
 
         event(new PasswordReset($user));
+
+        // Hapus semua session milik user (force logout semua device)
+        DB::table('sessions')->where('user_id', $user->id)->delete();
 
         // Hapus session setelah berhasil reset
         session()->forget('otp_verified_email');

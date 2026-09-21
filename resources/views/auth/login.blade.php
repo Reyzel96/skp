@@ -57,13 +57,6 @@
             <x-input-error :messages="$errors->get('password')" class="mt-1 ml-1" />
         </div>
 
-        <!-- Remember Me -->
-        <label for="remember_me" class="inline-flex items-center cursor-pointer group ml-1">
-            <input id="remember_me" type="checkbox" name="remember"
-                class="rounded-[6px] border-slate-300 text-brand-lime focus:ring-brand-lime/40 focus:ring-offset-0 w-[18px] h-[18px] transition-all cursor-pointer">
-            <span class="ms-2.5 text-[13px] sm:text-[14px] font-medium text-slate-500 group-hover:text-slate-800 transition-colors">Ingat saya di perangkat ini</span>
-        </label>
-
         <!-- Submit -->
         <button type="submit" class="relative w-full h-[59px] rounded-[18px] font-bold text-[14px] uppercase tracking-[0.15em] text-white bg-gradient-to-r from-[#119675] to-[#2DBE68] shadow-lg shadow-[#119675]/30 transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[#119675]/40 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-3 group overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed disabled:translate-y-0 disabled:active:scale-100" :disabled="loading">
             <span class="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none"></span>

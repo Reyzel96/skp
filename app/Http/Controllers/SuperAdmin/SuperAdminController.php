@@ -463,7 +463,12 @@ class SuperAdminController extends Controller
             return back()->with('error', 'Tidak bisa menghapus akun Anda sendiri saat sedang login!');
         }
 
-        if (\Illuminate\Support\Facades\Cache::has('user-online-' . $user->id)) {
+        $isOnline = DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->where('last_activity', '>=', now()->getTimestamp() - 300)
+            ->exists();
+
+        if ($isOnline) {
             return back()->with('error', 'Gagal: Akun ini sedang online/aktif digunakan!');
         }
 
@@ -482,12 +487,11 @@ class SuperAdminController extends Controller
             return back()->with('error', 'Gagal: Anda memilih akun Anda sendiri untuk dihapus!');
         }
 
-        $onlineIds = [];
-        foreach ($request->ids as $id) {
-            if (\Illuminate\Support\Facades\Cache::has('user-online-' . $id)) {
-                $onlineIds[] = $id;
-            }
-        }
+        $onlineIds = DB::table('sessions')
+            ->whereIn('user_id', $request->ids)
+            ->where('last_activity', '>=', now()->getTimestamp() - 300)
+            ->distinct()
+            ->pluck('user_id');
 
         if (count($onlineIds) > 0) {
             return back()->with('error', 'Gagal: Ada ' . count($onlineIds) . ' akun yang sedang online/aktif digunakan dalam pilihan Anda!');

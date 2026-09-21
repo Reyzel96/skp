@@ -181,7 +181,11 @@
                         <tr class="hover:bg-gray-50 transition">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 @php
-                                    $isOnline = \Cache::has('user-online-' . $user->id);
+                                    $activeSince = now()->getTimestamp() - 300;
+                                    $isOnline = \Illuminate\Support\Facades\DB::table('sessions')
+                                        ->where('user_id', $user->id)
+                                        ->where('last_activity', '>=', $activeSince)
+                                        ->exists();
                                     $canDelete = $user->id !== auth()->id() && !$isOnline;
                                 @endphp
                                 @if($canDelete)
