@@ -12,3 +12,5 @@ public/uploads/
 *.sql
 
 /testing/
+
+.phpunit.result.cache
