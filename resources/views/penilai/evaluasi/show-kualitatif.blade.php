@@ -90,7 +90,7 @@
                         }
                     });
                 },
-                
+
                 renderChart() {
                     const canvas = document.getElementById('evaluasiChartCanvas');
                     if (!canvas || !this.capaianKinerja) return;
@@ -200,15 +200,229 @@
                 }
 
                 @media print {
-                    .print-area > div[x-show] { display: block !important; }
-                    .print-area [x-cloak] { display: block !important; }
-                    .print-area form,
-                    .print-area input,
-                    .print-area textarea,
-                    .print-area select,
-                    .print-area button { display: none !important; }
-                    .print-area .area-cetak,
-                    .print-area > div { border: none !important; box-shadow: none !important; }
+                    /* HANYA tab yang sedang aktif di layar yang dicetak.
+                       Panel non-aktif tetap mengikuti kondisi Alpine
+                       (inline display:none dari x-show + x-cloak), jadi
+                       tidak ada rule yang memaksa panel tersembunyi
+                       menjadi tampil saat print. */
+                    #print-area [x-cloak] { display: none !important; }
+
+                    /* Elemen pengganti khusus cetak (.print-only) tersembunyi
+                       di layar; hanya tampil di dalam @media print (rule
+                       display:block untuk print ada di dalam blok ini). */
+                    #print-area .print-only { display: none !important; }
+
+                    /* Kontrol form tidak dicetak: input (file/number/hidden),
+                       select hasil kerja, tombol aksi. Textarea tidak
+                       disembunyikan — digaya ulang jadi teks polos di bawah. */
+                    #print-area form input,
+                    #print-area form select,
+                    #print-area form button,
+                    #print-area .no-print { display: none !important; }
+
+                    /* Elemen pengganti khusus cetak (.print-only): tampil saat
+                       print (tersembunyi oleh rule di awal blok ini). Dipakai
+                       untuk nilai hasil kerja (menggantikan select) dan
+                       rating/predikat (menggantikan textarea yang nilainya
+                       terikat via atribut :value Alpine sehingga tidak ikut
+                       tercetak sebagai isi textarea). */
+                    #print-area .print-only {
+                        display: block !important;
+                        white-space: pre-wrap;
+                        overflow-wrap: break-word;
+                        word-break: break-word;
+                    }
+
+                    /* Textarea rating/predikat (nilai terikat :value Alpine,
+                        bukan isi server) disembunyikan saat print — sudah
+                        diwakili elemen .print-only di sampingnya. */
+                    #print-area .print-hidden { display: none !important; }
+
+                    /* Textarea (umpan balik, realisasi tambahan, rating, predikat)
+                       tampil sebagai teks polos: tanpa bingkai, tanpa scrollbar,
+                       tanpa batas tinggi sehingga seluruh isinya tercetak. */
+                    #print-area form textarea {
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        resize: none !important;
+                        min-height: 0 !important;
+                        max-height: none !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                    }
+
+                    /* Placeholder textarea kosong (mis. "Tuliskan umpan balik...")
+                       tidak dicetak. */
+                    #print-area form textarea::placeholder {
+                        color: transparent !important;
+                    }
+
+                    /* Kartu realisasi dipoloskan (tanpa kartu/shadow) supaya
+                       menyatu dengan tabel dokumen resmi. Antar kartu
+                       dirapatkan dan kartu tidak terpotong di tengah
+                       halaman (berpindah utuh bila tidak muat). */
+                    #print-area .realisasi-card-penilai {
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        margin-bottom: 6px !important;
+                        /* break-inside DIHAPUS: avoid pada kartu realisasi yang TINGGI
+                           memaksa seluruh baris pindah utuh ke halaman berikutnya dan
+                           menyisakan area tabel kosong besar di halaman sebelumnya.
+                           Dengan auto, baris panjang terpecah wajar di dalam kartu
+                           (label + isi kartu tetap mengalir, header tabel berulang). */
+                        page-break-inside: auto;
+                        break-inside: auto;
+                    }
+
+                    /* Ikon (paperclip/file) di kartu realisasi tidak dicetak;
+                       judul subbab tetap tampil sebagai teks. */
+                    #print-area .realisasi-card-penilai i { display: none !important; }
+
+                    /* Tautan/identitas berkas bukti & kotak biru bukti tidak
+                       dicetak (data & tautan tetap utuh di layar). Selector
+                       div[x-show].bukti-meta-print lebih spesifik dari rule
+                       display:block di atas supaya link berkas tetap tersembunyi. */
+                    #print-area div[x-show].bukti-meta-print,
+                    #print-area .bukti-meta-print { display: none !important; }
+
+                    /* Kartu realisasi kosong disembunyikan seluruhnya (judul ikut
+                       hilang) tanpa menggeser struktur tabel lain. */
+                    #print-area .realisasi-card-empty { display: none !important; }
+
+                    /* Kotak 'Tidak wajib lampiran' & placeholder kekosongan tidak
+                       dicetak. */
+                    #print-area .lampiran-optional-print,
+                    #print-area .empty-placeholder-print { display: none !important; }
+
+                    /* Bingkai pembungkus tab tidak ikut tercetak. */
+                    #print-area div[x-show] {
+                        border: none !important;
+                        box-shadow: none !important;
+                    }
+
+                    /* 6) Proporsi kolom cetak TABEL EVALUASI UTAMA
+                       (Hasil Kerja 36% | Realisasi 24% | Umpan Balik 26% |
+                       Hasil Kerja/nilai 14%). Selektor dibatasi ke tabel yang
+                       memiliki <thead> DAN berisi kartu realisasi — tabel
+                       identitas (tanpa kartu) dan tabel Perilaku Kerja
+                       (header di <tbody>, tanpa <thead>) tidak terdampak.
+                       Kolom ke-5 "ANGKA" tetap tersembunyi via class Tailwind
+                       `hidden`; karena display:none kolom itu tidak menyumbang
+                       lebar, maka 36+24+26+14 = 100% tetap pas. */
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) thead th:nth-child(1),
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) tbody td:nth-child(1) { width: 36% !important; }
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) thead th:nth-child(2),
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) tbody td:nth-child(2) { width: 24% !important; }
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) thead th:nth-child(3),
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) tbody td:nth-child(3) { width: 26% !important; }
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) thead th:nth-child(4),
+                    #print-area table.table-kualitatif:has(thead):has(.realisasi-card-penilai) tbody td:nth-child(4) { width: 14% !important; }
+
+                    /* 6b) Pemenggalan halaman: tabel & baris boleh menyambung
+                       antar halaman (baris panjang berlanjut wajar); judul
+                       tabel tidak terpisah dari baris pertamanya. */
+                    #print-area table.table-kualitatif,
+                    #print-area table.table-kualitatif tr { page-break-inside: auto; }
+                    #print-area table.table-kualitatif thead { page-break-inside: avoid; break-inside: avoid; }
+                    #print-area table.table-kualitatif thead th { page-break-after: avoid; break-after: avoid; }
+
+                    /* 6b-2) Judul grup (A. UTAMA / B. TAMBAHAN / RATING /
+                       PREDIKAT) tidak boleh tercetak sendirian di dasar
+                       halaman tanpa isi setelahnya. Baris judul dipaksa
+                       menyatu dengan baris berikutnya: bila sisa ruang
+                       tidak cukup, judul ikut pindah ke halaman berikutnya.
+                       Baris data tetap boleh terpecah (rule di atas),
+                       jadi tidak ada ruang kosong besar akibat baris
+                       tinggi dipindah utuh. */
+                    #print-area table.table-kualitatif tr:has(+ tr) td[colspan]:only-child {
+                        page-break-after: avoid;
+                        break-after: avoid;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    /* 6b-3) Penyatuan judul grup/header dengan baris data pertama:
+                       Chromium sering mengabaikan break-after:avoid ANTAR baris
+                       tabel, tetapi menghormati break-inside:avoid pada grup
+                       <tbody>. Judul (A. UTAMA, B. TAMBAHAN) dan header tabel
+                       Perilaku Kerja ditempatkan dalam <tbody> tersendiri
+                       (class keep-with-next-print, sama-sama berisi judul + baris
+                       data pertama) sehingga keduanya berpindah BERSAMA ke
+                       halaman berikutnya bila ruang tidak cukup — judul tidak
+                       pernah tercetak sendirian di dasar halaman. Baris data
+                       BERIKUTNYA tetap boleh terpecah wajar (tbody lain tidak
+                       ber-avoid). Tampilan layar tidak berubah: di layar semua
+                       tbody dirender identik tanpa garis pemisah. */
+                    #print-area table.table-kualitatif tbody.keep-with-next-print {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    /* 6c) Teks panjang membungkus di dalam sel — tidak
+                       meluber/melebarkan kolom. */
+                    #print-area table.table-kualitatif td { overflow-wrap: break-word; }
+
+                    /* 7) Kartu realisasi di sel B. TAMBAHAN dipoloskan juga
+                       (struktur sama, hanya belum ber-class penilai). */
+                    #print-area .area-cetak td .rounded-lg,
+                    #print-area td .rounded-lg {
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        border-radius: 0 !important;
+                    }
+
+                    /* 8) Blok PREDIKAT KINERJA + POLA DISTRIBUSI dicetak
+                       apa adanya (ukuran, tinggi, jarak, posisi sama dengan
+                       tampilan desain terkini — TIDAK dipadatkan). Kotak
+                       220px & canvas tetap mengikuti layout. */
+                    #print-area td.predikat-pola-td div:has(> canvas) {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    /* 9) Pemangkasan sisa ruang vertikal agar tabel terakhir
+                       tidak meluber 1 halaman ekstra yang isinya hanya garis
+                       tepi & margin (halaman kosong di ekor PDF). Padding
+                       pembungkus tab dan jarak antar tabel dirapatkan hanya
+                       saat cetak — tampilan layar tidak berubah. */
+                    #print-area div[x-show] {
+                        padding: 0 !important;
+                        margin-bottom: 0 !important;
+                    }
+                    #print-area table.table-kualitatif { margin-bottom: 10px !important; }
+                    #print-area .table-kualitatif:last-of-type { margin-bottom: 0 !important; }
+
+                    /* 10) Border bawah baris tabel yang terpotong pindah halaman:
+                          Chromium mode border-collapse:collapse TIDAK menggambar
+                          border bawah fragmen baris saat baris panjang terbelah
+                          di batas halaman (tabel terlihat "tak selesai").
+                          Solusi khusus cetak: pakai model border terpisah
+                          (separate) dengan border per-sel — setiap fragmen
+                          sel menggambar border sendiri sehingga potongan
+                          halaman selalu tertutup garis rapi. Tanpa efek di
+                          layar (hanya @media print). */
+                    #print-area table.table-kualitatif {
+                        border-collapse: separate !important;
+                        border-spacing: 0 !important;
+                    }
+                    #print-area table.table-kualitatif td,
+                    #print-area table.table-kualitatif th {
+                        border-bottom: 1px solid #000 !important;
+                        border-right: 1px solid #000 !important;
+                        border-left: 1px solid #000 !important;
+                        border-top: none !important;
+                    }
+                    #print-area table.table-kualitatif thead th,
+                    #print-area table.table-kualitatif tr:first-child th,
+                    #print-area table.table-kualitatif tr:first-child td {
+                        border-top: 1px solid #000 !important;
+                    }
                 }
             </style>
 
@@ -414,7 +628,7 @@
                 <table class="table-kualitatif mb-6 w-full">
                     <tbody>
                         <tr>
-                            <td class="p-4">
+                            <td class="p-4 predikat-pola-td">
                                 <div class="mb-6">
                                     <label class="font-bold text-sm block mb-2">PREDIKAT KINERJA PEGAWAI</label>
                                     <div class="w-full border border-gray-200 bg-gray-100 rounded-md shadow-inner text-gray-700 py-2 px-3 min-w-[200px]"
@@ -455,6 +669,12 @@
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50">A. UTAMA</td>
                         </tr>
+                    </tbody>
+                    {{-- Baris judul grup & baris data pertama direkatkan saat cetak:
+                         Chromium mengabaikan break-after:avoid antar <tr>, tetapi
+                         menghormati page-break-inside:avoid pada <tbody> — judul
+                         tidak pernah tercetak sendirian di dasar halaman. --}}
+                    <tbody class="keep-with-next-print">
                         @php
                             // Helper label singkat untuk kotak bukti dukung A. UTAMA
                             // (pola sama persis dengan $utamaLabel di view Dosen).
@@ -525,25 +745,25 @@
                                                 $childRow = $rChild->first();
                                                 $cLabel = $childRow->label_realisasi ?? ($child->label_lampiran ?? $utamaLabel($child->indikator_kinerja, $cIdx + 1));
                                             @endphp
-                                            <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                            <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm realisasi-card-penilai @if(!$childRow || trim((string) $childRow->realisasi) === '') realisasi-card-empty @endif">
                                                 <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5">
                                                     <i class="fas fa-paperclip text-blue-600"></i>
                                                     <span>{{ $cLabel }}</span>
                                                 </div>
-                                                <div class="whitespace-pre-wrap text-gray-800 text-xs mb-2">{{ $childRow->realisasi ?? '-' }}</div>
+                                                <div class="whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-gray-800 text-xs mb-2">{{ \App\Support\RealisasiRingkas::ringkas(trim((string) ($childRow->realisasi ?? ''))) ?: '-' }}</div>
                                                 @if($childRow && $childRow->bukti_dukung_url)
-                                                    <div>
+                                                    <div class="bukti-meta-print">
                                                         <a href="{{ asset($childRow->bukti_dukung_url) }}" target="_blank" class="text-xs text-blue-600 hover:underline">
                                                             <i class="fas fa-file mr-1"></i> {{ $childRow->bukti_dukung_nama ?? 'Lihat Bukti' }}
                                                         </a>
                                                     </div>
                                                 @else
-                                                    <div class="text-xs text-gray-400 italic">Tidak ada file bukti</div>
+                                                    <div class="text-xs text-gray-400 italic bukti-meta-print">Tidak ada file bukti</div>
                                                 @endif
                                             </div>
                                         @endforeach
                                     @else
-                                        <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic">
+                                        <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic lampiran-optional-print">
                                             <i class="fas fa-info-circle mr-1"></i> Tidak wajib lampiran
                                         </div>
                                     @endif
@@ -558,19 +778,24 @@
                                         <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                         <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                     </select>
+                                    {{-- Teks khusus cetak: mengikuti nilai Alpine selectedHasilKerja
+                                        (select disembunyikan saat print; nilainya tetap tercetak). --}}
+                                    <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                                 </td>
                                 <td class="align-middle text-center hidden">
                                     <input type="number" :value="hasilKerjaMap[selectedHasilKerja]" readonly tabindex="-1" class="w-16 border-gray-200 bg-gray-50 rounded-md shadow-inner text-center font-bold text-gray-600 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none">
                                 </td>
                             </tr>
                         @empty
-                            <tr>
+                            <tr class="empty-placeholder-print">
                                 <td colspan="5" class="text-center text-gray-500 italic py-4">Belum ada data Kinerja Utama.</td>
                             </tr>
                         @endforelse
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50">B. TAMBAHAN</td>
                         </tr>
+                    </tbody>
+                    <tbody class="keep-with-next-print">
                         @forelse($tambahans as $index => $tambahan)
                         <tr x-data="{
                             hasilKerjaMap: {
@@ -593,13 +818,13 @@
                             @endphp
                             <td class="align-top" x-data="{ items: {{ $tData }} }">
                                 <template x-for="(item, index) in items" :key="item.id">
-                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md relative group">
+                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md relative group realisasi-card-penilai @if($rTambahan->count() === 0 || trim((string) ($rTambahan->first()->realisasi ?? '')) === '') realisasi-card-empty @endif">
                                         
                                         <div class="flex items-start gap-2 mb-3 pr-6">
                                             <span class="font-bold text-gray-700 mt-1" x-text="(index + 1) + '.'"></span>
                                             <textarea x-model="item.text" x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = ($el.scrollHeight + 4) + 'px' } }" x-init="$nextTick(() => resize())" @input="resize()" class="w-full border-gray-300 rounded-md shadow-sm text-xs p-2.5 focus:ring-blue-500 focus:border-blue-500 overflow-hidden resize-none" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." :name="'realisasi[tambahan][' + {{ $tambahan->id }} + '][]'" readonly></textarea>
                                         </div>
-                                        <div class="ml-6 bg-blue-50 p-2.5 rounded border border-blue-100">
+                                        <div class="ml-6 bg-blue-50 p-2.5 rounded border border-blue-100 bukti-meta-print">
                                             
                                             <div x-show="item.file" class="mb-2">
                                                 <a :href="'/' + item.file" target="_blank" class="text-xs text-blue-600 hover:underline"><i class="fas fa-file mr-1"></i> <span x-text="item.filename"></span></a>
@@ -621,34 +846,46 @@
                                     <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                     <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                 </select>
+                                {{-- Teks khusus cetak: mengikuti nilai Alpine selectedHasilKerja. --}}
+                                <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                             </td>
                             <td class="align-middle text-center hidden">
                                 <input type="number" :value="hasilKerjaMap[selectedHasilKerja]" readonly tabindex="-1" class="w-16 border-gray-200 bg-gray-50 rounded-md shadow-inner text-center font-bold text-gray-600 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none">
                             </td>
                         </tr>
                         @empty
-                        <tr>
+                        <tr class="empty-placeholder-print">
                             <td colspan="5" class="text-center text-gray-500 italic py-4">Tidak ada target tambahan.</td>
                         </tr>
                         @endforelse
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left">
                                 <div class="mb-2">RATING HASIL KERJA*</div>
-                                <textarea :value="rating" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="rating" readonly tabindex="-1" class="print-hidden rating-penilai-print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                {{-- Teks khusus cetak: textarea di atas memakai binding :value
+                                    (DOM property, bukan innerHTML) sehingga tidak ikut tercetak;
+                                    nilainya digantikan elemen print-only berikut. --}}
+                                <span class="print-only font-bold" x-text="rating || '-'"></span>
                             </td>
                         </tr>
                         </tbody>
                 </table>
 
                 <table class="table-kualitatif w-full mb-6" style="table-layout: fixed;">
-                    <tbody>
+                    {{-- Header PERILAKU KERJA ditaruh di <thead> asli: Chromium
+                         mengulang thead di setiap halaman lanjutan saat cetak dan
+                         rule 6b (thead page-break-inside:avoid + th page-break-after:avoid)
+                         mencegah header tercetak sendirian di dasar halaman. --}}
+                    <thead>
                         <!-- PERILAKU KERJA SECTION -->
                         <tr class="bg-gray-50 text-xs border-t-2 border-b-2 border-gray-300">
                             <th colspan="2" class="p-2 text-left w-[45%]">PERILAKU KERJA</th>
-                            <th class="p-2 text-center w-[25%] no-print">REALISASI PEGAWAI &amp; BUKTI DUKUNG</th>
+                            <th class="p-2 text-center w-[25%]">REALISASI PEGAWAI &amp; BUKTI DUKUNG</th>
                             <th class="p-2 text-center w-[20%]">UMPAN BALIK BERKELANJUTAN BERDASARKAN BUKTI DUKUNG</th>
                             <th class="p-2 text-center w-[10%]">HASIL KERJA</th>
                         </tr>
+                    </thead>
+                    <tbody>
                         @php
                             // Helper label singkat untuk kotak bukti dukung Section D
                             // (pola sama persis dengan $perilakuLabel di view Dosen).
@@ -701,7 +938,7 @@
                                     $perilakuChildren = $acuanForAspek->children->where('butuh_lampiran', true)->values();
                                 }
                             @endphp
-                            <td class="align-top no-print">
+                            <td class="align-top">
                                 @if($perilakuChildren->isNotEmpty())
                                     @foreach($perilakuChildren as $cIdx => $child)
                                         @php
@@ -709,25 +946,25 @@
                                             $childRow = $rChild->first();
                                             $cLabel = $childRow->label_realisasi ?? ($child->label_lampiran ?? $perilakuLabel($child->indikator_kinerja, $cIdx + 1));
                                         @endphp
-                                        <div class="mb-3 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                        <div class="mb-3 bg-white p-3 rounded-lg border border-gray-200 shadow-sm realisasi-card-penilai @if(!$childRow || trim((string) $childRow->realisasi) === '') realisasi-card-empty @endif">
                                             <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5">
                                                 <i class="fas fa-paperclip text-blue-600"></i>
                                                 <span>{{ $cLabel }}</span>
                                             </div>
-                                            <div class="whitespace-pre-wrap text-gray-800 text-xs mb-2">{{ $childRow->realisasi ?? '-' }}</div>
+                                            <div class="whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-gray-800 text-xs mb-2">{{ \App\Support\RealisasiRingkas::ringkas(trim((string) ($childRow->realisasi ?? ''))) ?: '-' }}</div>
                                             @if($childRow && $childRow->bukti_dukung_url)
-                                                <div>
+                                                <div class="bukti-meta-print">
                                                     <a href="{{ asset($childRow->bukti_dukung_url) }}" target="_blank" class="text-xs text-blue-600 hover:underline">
                                                         <i class="fas fa-file mr-1"></i> {{ $childRow->bukti_dukung_nama ?? 'Lihat Bukti' }}
                                                     </a>
                                                 </div>
                                             @else
-                                                <div class="text-xs text-gray-400 italic">Tidak ada file bukti</div>
+                                                <div class="text-xs text-gray-400 italic bukti-meta-print">Tidak ada file bukti</div>
                                             @endif
                                         </div>
                                     @endforeach
                                 @else
-                                    <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic">
+                                    <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic lampiran-optional-print">
                                         <i class="fas fa-info-circle mr-1"></i> Tidak wajib lampiran
                                     </div>
                                 @endif
@@ -742,19 +979,23 @@
                                     <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                     <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                 </select>
+                                {{-- Teks khusus cetak: mengikuti nilai Alpine selectedHasilKerja. --}}
+                                <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                             </td>
                         </tr>
                         @endforeach
 <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left border-t border-gray-200">
                                 <div class="mb-2">RATING PERILAKU KERJA*</div>
-                                <textarea :value="ratingPerilaku" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="ratingPerilaku" readonly tabindex="-1" class="print-hidden rating-penilai-print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <span class="print-only font-bold" x-text="ratingPerilaku || '-'"></span>
                             </td>
                         </tr>
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left border-t border-gray-200">
                                 <div class="mb-2">PREDIKAT KINERJA PEGAWAI*</div>
-                                <textarea :value="predikatKinerja" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="predikatKinerja" readonly tabindex="-1" class="print-hidden rating-penilai-print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <span class="print-only font-bold" x-text="predikatKinerja || '-'"></span>
                             </td>
                         </tr>
 </tbody>

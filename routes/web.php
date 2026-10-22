@@ -152,6 +152,7 @@ Route::middleware(['auth'])->prefix('penilai')->name('penilai.')->group(function
         Route::patch('/evaluasi-bawahan/verify/{header_id}', 'verify')->name('evaluasi.verify');
         Route::patch('/evaluasi-bawahan/verify-kualitatif/{header_id}', 'verifyKualitatif')->name('evaluasi.verify-kualitatif');
         Route::get('/evaluasi-bawahan/download/bukti', 'downloadBukti')->name('evaluasi.download-bukti');
+        Route::get('/evaluasi-bawahan/export-pdf/{header_id}', 'exportPdfKualitatif')->name('evaluasi.export-pdf');
     });
 
         Route::controller(ApprovalSkpDosenKualitatifController::class)->group(function () {

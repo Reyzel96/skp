@@ -3,7 +3,31 @@ import './bootstrap';
 import * as Turbo from '@hotwired/turbo';
 import Alpine from 'alpinejs';
 
+// Ekstraksi teks PDF untuk "Upload Bukti Dukung" (SKP Dosen Kualitatif).
+// Dijalankan sepenuhnya di browser via pdf.js — tidak ada byte PDF yang
+// dikirim ke server/layanan eksternal.
+import { attachPdfBuktiHandler, limitRealisasiWords, REALISASI_MAX_WORDS } from './pdf-bukti-dukung';
+
 window.Alpine = Alpine;
+
+// Helper global untuk x-init di blade (rute initPdfBukti).
+// Pemakaian di show.blade.php: x-init="initPdfBukti($el)" pada div kotak
+// upload. Handler mencari input[type=file], textarea realisasi, dan elemen
+// status di DALAM kotak itu sendiri — teks PDF selalu masuk ke textarea
+// kotak yang sama, tidak pernah kotak lain.
+window.initPdfBukti = (uploadBox) => {
+    if (!(uploadBox instanceof HTMLElement)) return;
+    attachPdfBuktiHandler({
+        fileInput: uploadBox.querySelector('input[type="file"]'),
+        statusEl: uploadBox.querySelector('[data-pdf-status]'),
+        uploadBox: uploadBox,
+    });
+};
+
+// Helper pembatasan teks realisasi (berbasis KATA, per dokumen) untuk skrip
+// cetak di show.blade.php: satu logika dengan ekstraksi (web & print konsisten).
+window.limitRealisasiWords = limitRealisasiWords;
+window.REALISASI_MAX_WORDS = REALISASI_MAX_WORDS;
 
 // =========================================================================
 // KOMPONEN ALPINE YANG BUTUH DATA PER-PAGE DARI BLADE

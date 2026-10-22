@@ -97,6 +97,14 @@ class SkpDosenKualitatifController extends Controller
             // Label lampiran kustom yang diketik dosen (per sub-indikator/realisasi).
             $labelData = $request->input('label_realisasi', []);
 
+            // Batas panjang teks realisasi berbasis KATA (konsisten dengan batas
+            // frontend di resources/js/pdf-bukti-dukung.js via App\Support\RealisasiRingkas).
+            // Mencegah teks hasil ekstraksi PDF puluhan ribu kata masuk DB dan
+            // merusak tampilan/print. Data lama yang sudah tersimpan tidak diubah.
+            $limitRealisasi = function ($text) {
+                return \App\Support\RealisasiRingkas::ringkas($text);
+            };
+
             // Guard: jika tidak ada data realisasi di request (field terkunci/disabled tidak terkirim),
             // jangan hapus data lama — batalkan untuk mencegah kehilangan data.
             if (empty($realisasiData)) {
@@ -130,6 +138,7 @@ class SkpDosenKualitatifController extends Controller
                 foreach ($realisasiData['utama'] as $childId => $text) {
                     // Toleransi kalau ada field lama berbent array
                     $text = is_array($text) ? (string) ($text[0] ?? '') : (string) $text;
+                    $text = $limitRealisasi($text);
                     $file = $buktiDukungData['utama'][$childId] ?? null;
 
                     if (empty(trim($text)) && !$file) {
@@ -170,7 +179,7 @@ class SkpDosenKualitatifController extends Controller
                         $model->skp_header_id = $id;
                         $model->target_id = $tambahanId;
                         $model->target_type = 'tambahan';
-                        $model->realisasi = $text;
+                        $model->realisasi = $limitRealisasi($text);
                         
                         if (isset($buktiDukungData['tambahan'][$tambahanId][$index])) {
                             $file = $buktiDukungData['tambahan'][$tambahanId][$index];
@@ -191,6 +200,7 @@ class SkpDosenKualitatifController extends Controller
                 foreach ($realisasiData['perilaku'] as $childId => $text) {
                     // Toleransi kalau ada field lama berbentuk array
                     $text = is_array($text) ? (string) ($text[0] ?? '') : (string) $text;
+                    $text = $limitRealisasi($text);
                     $file = $buktiDukungData['perilaku'][$childId] ?? null;
 
                     // Lewati baris kosong tanpa file

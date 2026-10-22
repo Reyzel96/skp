@@ -204,18 +204,463 @@
                     font-size: 13px;
                 }
 
+                /* Elemen khusus cetak: pengganti teks dari kontrol form.
+                   Tersembunyi di layar, ditampilkan hanya saat print. */
+                .print-only { display: none !important; }
+
                 @media print {
-                    .print-area > div[x-show] { display: block !important; }
-                    .print-area [x-cloak] { display: block !important; }
-                    .print-area form,
-                    .print-area input,
-                    .print-area textarea,
-                    .print-area select,
-                    .print-area button { display: none !important; }
-                    .print-area .area-cetak,
-                    .print-area > div { border: none !important; box-shadow: none !important; }
+                    /* 1) Sembunyikan kontrol form & tombol (input file, input teks,
+                          select, tombol tambah/hapus). Textarea realisasi ikut
+                          disembunyikan dan isinya digantikan elemen .print-only.
+                          Textarea read-only (umpan balik, rating, predikat) TIDAK
+                          disembunyikan di sini — digaya ulang jadi teks polos di (1b). */
+                    #print-area form input,
+                    #print-area form select,
+                    #print-area form button,
+                    #print-area .no-print,
+                    #print-area [data-pdf-status] { display: none !important; }
+
+                    /* 1b) Textarea read-only (umpan balik, rating, predikat kinerja)
+                            tampil sebagai teks polos tanpa bingkai, tanpa scrollbar,
+                            dan tanpa batas tinggi supaya seluruh isinya tercetak. */
+                    #print-area form textarea {
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        resize: none !important;
+                        min-height: 0 !important;
+                        max-height: none !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                    }
+
+                    /* 1c) Textarea realisasi (punya pengganti .print-only) tetap
+                            disembunyikan. Ditandai lewat name field-nya. */
+                    #print-area form textarea[name^="realisasi"] { display: none !important; }
+
+                    /* 2) Kotak "Upload Bukti" (label upload, input file, nama file,
+                          pesan status ekstraksi PDF) tidak ikut dicetak. */
+                    #print-area .pdf-upload-box { display: none !important; }
+
+                    /* 3) Isi realisasi/umpan balik/rating tampil sebagai teks biasa:
+                          membungkus sesuai lebar kolom, tanpa scrollbar, tanpa
+                          batas tinggi yang memotong isi. */
+                    #print-area .print-only {
+                        display: block !important;
+                        white-space: pre-wrap;
+                        overflow-wrap: break-word;
+                        word-break: break-word;
+                        min-height: 0 !important;
+                        max-height: none !important;
+                        overflow: visible !important;
+                    }
+
+                    /* 3f) Textarea rating/predikat (nilai terikat :value Alpine,
+                            bukan isi server) disembunyikan saat print — sudah
+                            diwakili elemen .print-only di sampingnya. */
+                    #print-area .print-hidden { display: none !important; }
+
+                    /* 3c) Label layar (judul subbab + ikon paperclip) TIDAK dicetak:
+                            judul sudah diwakili elemen [data-label-print] khusus cetak,
+                            jadi tidak boleh muncul dua kali. */
+                    #print-area .area-cetak td .realisasi-label-screen { display: none !important; }
+
+                    /* 3d) Kartu yang ditandai kosong oleh syncPrintRealisasi()
+                            (nilai realisasi kosong/whitespace saja) disembunyikan
+                            SELURUHNYA saat cetak — termasuk judul subbabnya.
+                            Menyembunyikan [data-realisasi-print] kosong juga
+                            menutup item kosong bawaan di B. TAMBAHAN. */
+                    #print-area [data-realisasi-card].realisasi-card-empty { display: none !important; }
+                    #print-area [data-realisasi-print]:empty { display: none !important; }
+
+                    /* 3e) Nama/tautan file bukti tidak dicetak: hasil cetak tiap
+                            kartu cukup judul subbab + isi realisasi. */
+                    #print-area .area-cetak td .bukti-nama-print { display: none !important; }
+
+                    /* 3b) Pengaman: sebelum mencetak, salin isi textarea realisasi
+                           (yang dikelola Alpine x-model) ke elemen .print-only
+                           penggantinya. Ini menjamin versi cetak selalu menampilkan
+                           nilai yang SEBENARNYA terlihat di layar — baik yang sudah
+                           tersimpan (pre-fill server) maupun yang baru diketik/diisi
+                           otomatis dari PDF dan belum tersimpan. Tanpa ini, elemen
+                           cetak berisi snapshot server saat render blade saja. */
+                    #print-area [data-realisasi-print]:not(:empty) {
+                        min-height: 1em;
+                    }
+
+                    /* 4) Kartu/kotak dekoratif di dalam sel tabel dipoloskan agar
+                          hasil cetak mendekati format dokumen asli. */
+                    #print-area .area-cetak td .rounded-lg,
+                    #print-area .area-cetak td .rounded-md,
+                    #print-area .area-cetak td .rounded {
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        border-radius: 0 !important;
+                    }
+
+                    /* 5) Pemenggalan halaman: tabel & baris boleh menyambung antar
+                          halaman supaya tidak ada ruang kosong besar di ekor halaman
+                          saat satu baris lebih tinggi dari sisa ruang. Granularitas
+                          pemenggalan dipindah ke kartu realisasi: kartu tidak boleh
+                          terpotong di tengah — seluruh kartu berpindah utuh ke
+                          halaman berikutnya bila tidak muat. */
+                    #print-area table { page-break-inside: auto; }
+                    #print-area tr { page-break-inside: auto; }
+                    /* Kartu realisasi tidak boleh terpotong di tengah — TAPI hanya
+                       bila muat dalam satu halaman. Kartu sangat panjang (lebih tinggi
+                       dari 1 halaman) dengan avoid akan didorong UTUH ke halaman
+                       berikutnya meninggalkan halaman kosong besar (bug hal. 2). Solusi:
+                       avoid tetap untuk kartu normal; kartu panjang diberi min-height 0
+                       sehingga engine boleh memecahnya di dalam kartu, bukan memindah-
+                       kan utuh. Deteksi kartu panjang via max-height + overflow visible
+                       memungkinkan pemenggalan natural. */
+                    #print-area [data-realisasi-card] {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                        /* Kartu yang tingginya melebihi sisa halaman tetap boleh dipecah
+                           — hindari halaman kosong akibat pemindahan utuh. */
+                        max-height: none;
+                    }
+                    /* Kartu SANGAT panjang (lebih tinggi dari satu halaman cetak):
+                       dipindah utuh akan menyisakan halaman kosong (bug hal. 2),
+                       maka boleh dipecah antar halaman. Class ditandai oleh
+                       markTallRealisasiCards() sebelum cetak berdasarkan tinggi
+                       kartu vs tinggi area cetak. */
+                    #print-area [data-realisasi-card].realisasi-card-tall {
+                        page-break-inside: auto;
+                        break-inside: auto;
+                    }
+                    #print-area td { overflow-wrap: break-word; }
+
+                    /* 6) Proporsi kolom cetak TABEL EVALUASI UTAMA: Hasil Kerja
+                          36% (lebih lebar — uraian target/indikator panjang),
+                          Realisasi 24%, Umpan Balik 26%, Hasil Kerja (nilai)
+                          14%. Berlaku di HEADER dan seluruh SEL body (kolom 5
+                          "ANGKA" tetap hidden via class Tailwind). Selektor
+                          hanya menarget thead/tbody tr yang memiliki sel
+                          realisasi (tabel identitas tidak terdampak karena
+                          strukturnya tidak memiliki 4+ kolom berurutan dengan
+                          thead 5 kolom — tetap diamankan dengan nth-child
+                          pada baris ber-kartu saja tidak praktis; tabel
+                          identitas memakai <th> colspan berbeda sehingga
+                          nth-child-nya juga cocok — karena itu dibatasi ke
+                          elemen yang berada SETELAH tabel evaluasi dengan
+                          selector :has td [data-realisasi-card] tidak reliable
+                          di print; solusi aman: batasi ke table yang berisi
+                          [data-realisasi-card] via :has()). */
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) thead th:nth-child(1),
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) tbody td:nth-child(1) { width: 36% !important; }
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) thead th:nth-child(2),
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) tbody td:nth-child(2) { width: 24% !important; }
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) thead th:nth-child(3),
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) tbody td:nth-child(3) { width: 26% !important; }
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) thead th:nth-child(4),
+                    #print-area table.table-kualitatif:has([data-realisasi-card]) tbody td:nth-child(4) { width: 14% !important; }
+
+                    /* 6b) Judul tabel tidak terpisah dari baris isinya saat
+                           halaman berganti. */
+                    #print-area table.table-kualitatif thead { page-break-inside: avoid; break-inside: avoid; }
+                    #print-area table.table-kualitatif thead th { page-break-after: avoid; break-after: avoid; }
+                    /* Header tabel perilaku (PERILAKU KERJA | REALISASI | UMPAN BALIK | HASIL KERJA)
+                       jangan terpisah dari baris pertamanya — sebelumnya nyangkut sendirian
+                       di dasar halaman (bug hal. 4). */
+                    #print-area table.table-perilaku thead { page-break-inside: avoid; break-inside: avoid; }
+                    #print-area table.table-perilaku thead th { page-break-after: avoid; break-after: avoid; }
+                    /* Baris tabel kualitatif: baris pertama grup (A. UTAMA dst.) jangan
+                       terpisah dari isi di belakangnya. */
+
+                    /* 6b-3) Grup "judul + baris data pertama" (markup beberapa tbody):
+                       Chromium menghormati break-inside:avoid pada tbody, tidak pada
+                       break-after:avoid antar-baris — judul grup (HASIL KERJA /
+                       A. UTAMA / B. TAMBAHAN / PERILAKU KERJA*) tidak boleh tercetak
+                       sendirian di dasar halaman. */
+                    #print-area table.table-kualitatif tbody.keep-with-next-print,
+                    #print-area table.table-perilaku tbody.keep-with-next-print {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    /* 6c) Tipografi cetak: isi utama minimal 9pt agar tetap
+                           terbaca (11px = 8.25pt terlalu kecil). Padding sel
+                           ikut disesuaikan agar format resmi tetap lega. */
+                    #print-area table.table-kualitatif th,
+                    #print-area table.table-kualitatif td {
+                        font-size: 12px !important; /* 9pt */
+                        line-height: 1.35 !important;
+                        padding: 5px 7px !important;
+                    }
+
+                    /* 6d) Placeholder kekosongan data tidak dicetak — dokumen
+                           resmi tidak boleh menampilkan catatan internal
+                           seperti "Tidak ada target tambahan." atau
+                           "Belum ada data Kinerja Utama." (baris direktif
+                           empty Blade di tabel SKP tab SKP Pegawai & Evaluasi). */
+                    #print-area tr.empty-placeholder-print { display: none !important; }
+                    #print-area td.empty-placeholder-print { display: none !important; }
+
+                    /* 7) Jarak antar kartu realisasi saat cetak dirapatkan agar
+                          beberapa lampiran tersusun kompak satu di bawah yang lain. */
+                    #print-area [data-realisasi-card] { margin-bottom: 6px !important; }
+
+                    /* 8) Opsi B — pemecahan baris untuk baris yang berisi BEBERAPA
+                          kartu realisasi: kartu pertama tetap di baris asli
+                          (sejajar kolom Hasil Kerja), kartu berikutnya dipindah
+                          applyPrintRowSplit() ke baris lanjutan tersendiri sehingga
+                          tinggi tiap baris mengikuti isinya — tidak ada ruang kosong
+                          besar di bawah teks yang pendek. Sel pengiri/pengisi baris
+                          lanjutan tanpa garis & tanpa padding sehingga tercetak
+                          hanya kotak realisasinya (tampak seperti lanjutan baris). */
+                    #print-area tr.print-split-row > td.print-split-empty {
+                        border: none !important;
+                        padding: 0 !important;
+                    }
+
+                    /* 9) Kasus SATU realisasi: TIDAK ada penyeimbang vertikal.
+                          Teks tetap di ATAS sel (vertical-align: top default)
+                          sesuai format dokumen resmi — vertical-align: middle
+                          pernah dicoba dan dihapus karena hanya memindahkan
+                          teks ke tengah tanpa mengurangi tinggi baris dan
+                          terlihat janggal. Cara SATU-SATUNYA mengurangi ruang
+                          kosong pada baris ber-satu-realiasi adalah memecah
+                          baris seperti kasus multi-kartu (lihat fungsi
+                          applyPrintRowSplit dan opsi desain di bawah). */
+
+                    #print-area .area-cetak,
+                    #print-area > div { border: none !important; box-shadow: none !important; }
+
+                    /* 10) Tabel identitas (PEGAWAI YANG DINILAI / PEJABAT
+                           PENILAI KINERJA): pola kolom cetak jelas dan konsisten
+                           antara sisi pegawai & penilai — nomor | label | nilai.
+                           Span label & nilai diberi lebar tetap sehingga nilai
+                           selalu mulai pada posisi yang sama antar baris dan
+                           antar sisi; nilai panjang wrap rapi di dalam sel tanpa
+                           mendorong lebar kolom. Tampilan layar tidak berubah
+                           (class ident-* tanpa efek di luar @media print). */
+                    #print-area td .ident-label {
+                        display: inline-block !important;
+                        width: 42% !important;
+                        min-width: 110px !important;
+                        vertical-align: top !important;
+                    }
+                    #print-area td .ident-value {
+                        display: inline-block !important;
+                        width: 56% !important;
+                        vertical-align: top !important;
+                        overflow-wrap: break-word !important;
+                        word-break: break-word !important;
+                        white-space: normal !important;
+                    }
+
+                    /* Border bawah baris tabel yang terpotong pindah halaman:
+                          Chromium mode border-collapse:collapse TIDAK menggambar
+                          border bawah fragmen baris saat baris panjang terbelah
+                          di batas halaman. Solusi khusus cetak: model border
+                          terpisah (separate) dengan border per-sel — setiap
+                          fragmen sel menggambar border sendiri sehingga
+                          potongan halaman selalu tertutup garis rapi.
+                          Tanpa efek di layar (hanya @media print). */
+                    #print-area table.table-kualitatif {
+                        border-collapse: separate !important;
+                        border-spacing: 0 !important;
+                    }
+                    #print-area table.table-kualitatif td,
+                    #print-area table.table-kualitatif th {
+                        border-bottom: 1px solid #000 !important;
+                        border-right: 1px solid #000 !important;
+                        border-left: 1px solid #000 !important;
+                        border-top: none !important;
+                    }
+                    #print-area table.table-kualitatif thead th,
+                    #print-area table.table-kualitatif tr:first-child th,
+                    #print-area table.table-kualitatif tr:first-child td {
+                        border-top: 1px solid #000 !important;
+                    }
                 }
                 </style>
+                <script>
+                    // Sinkronisasi isi cetak SEBELUM dialog print dibuka (window.print
+                    // diblokir sinkron saat beforeprint berjalan, jadi disalin di sini).
+                    // Setiap textarea realisasi dipasangkan dengan elemen
+                    // [data-realisasi-print] di dalam pembungkus [data-realisasi-card]
+                    // yang sama (bukan lewat [x-data] — textarea dan <td> juga punya
+                    // x-data sendiri) supaya teks tidak pernah bergeser/tertukar ke
+                    // item lain. Nilai yang disalin = nilai SEBENARNYA di textarea
+                    // (Alpine x-model, termasuk teks hasil ekstraksi PDF yang belum
+                    // tersimpan); bila kosong, kembali ke snapshot teks tersimpan
+                    // server (data-print-fallback).
+                    //
+                    // Selain menyalin isi, fungsi ini menandai kartu yang realisasinya
+                    // KOSONG (hanya whitespace dianggap kosong) dengan class
+                    // .realisasi-card-empty — CSS @media print menyembunyikan kartu
+                    // bertanda itu SELURUHNYA (judul ikut hilang), sehingga kartu
+                    // tanpa isi dan item kosong bawaan B. TAMBAHAN tidak tercetak.
+                    function syncPrintRealisasi() {
+                        document.querySelectorAll('#print-area form textarea[name^="realisasi"]').forEach(function (ta) {
+                            // Pasangkan textarea dengan elemen cetak milik KARTU yang
+                            // sama: naik ke pembungkus [data-realisasi-card] terdekat,
+                            // lalu ambil [data-realisasi-print] DI DALAM kartu itu.
+                            // CATATAN: tidak memakai closest('[x-data]') karena textarea
+                            // realisasi sendiri punya x-data (fungsi resize) dan pada
+                            // section B. TAMBAHAN <td> juga ber-x-data (array items) —
+                            // keduanya bisa membuat pasangan meleset ke item lain.
+                            var card = ta.closest('[data-realisasi-card]');
+                            var printEl = card ? card.querySelector('[data-realisasi-print]') : null;
+                            if (!printEl) return;
+                            var val = (ta.value || '').trim();
+                            var fallback = (printEl.getAttribute('data-print-fallback') || '').trim();
+                            var effective = val !== '' ? ta.value : fallback;
+                            // Batasi teks cetak (maks 30 kata per dokumen) memakai
+                            // helper yang SAMA dengan ekstraksi PDF
+                            // (window.limitRealisasiWords, diekspos dari
+                            // resources/js/app.js) supaya web & print konsisten dan
+                            // dokumen cetak tetap ringkas walau teks realisasi
+                            // panjang. Aman utk halaman lama: helper ada karena
+                            // dibundel bersama halaman ini.
+                            if (typeof window.limitRealisasiWords === 'function') {
+                                effective = window.limitRealisasiWords(effective, window.REALISASI_MAX_WORDS || 30);
+                            }
+                            printEl.textContent = effective;
+                            // Kartu kosong = tidak ada teks di textarea DAN tidak ada
+                            // snapshot tersimpan. Judul & seluruh kartunya disembunyikan
+                            // saat print lewat CSS (.realisasi-card-empty).
+                            if (card) {
+                                card.classList.toggle('realisasi-card-empty', effective.trim() === '');
+                            }
+                        });
+                    }
+                    window.addEventListener('beforeprint', syncPrintRealisasi);
+
+                    // Opsi B — pemecahan baris saat cetak untuk baris yang berisi
+                    // BEBERAPA kartu realisasi (multi-lampiran):
+                    // - Kartu PERTAMA yang berisi dibiarkan di baris asli, sejajar
+                    //   kolom Hasil Kerja (dokumen tetap resmi: judul & isi utama
+                    //   tetap satu baris dengan targetnya).
+                    // - Kartu berikutnya yang berisi dipindah ke <tr> lanjutan baru
+                    //   (disisipkan tepat setelah baris asli). Kolom hasil kerja,
+                    //   umpan balik, dan hasil kerja pada baris lanjutan dibiarkan
+                    //   kosong tanpa garis (class print-split-empty), sehingga
+                    //   tercetak hanya kotak realisasinya — tinggi tiap baris
+                    //   mengikuti isinya dan tidak ada ruang kosong besar.
+                    // - Kartu kosong tidak dipindah (sudah disembunyikan CSS).
+                    //
+                    // Kasus SATU realisasi: baris TIDAK diberi perlakuan khusus
+                    // lagi — teks tetap di atas sel (format dokumen resmi).
+                    // (vertical-align: middle sudah dihapus: hanya memindahkan
+                    // teks ke tengah tanpa mengurangi tinggi baris.)
+                    // Fungsi idempotent: elemen yang sudah dipindah ditandai
+                    // data-print-split supaya cetak ulang tidak menduplikasi.
+                    // PEMULIHAN LAYOUT: semua mutasi DOM (kartu dipindah ke
+                    // baris lanjutan) dicatat di _printMutations; restorePrintLayout()
+                    // mengembalikan kartu ke posisi aslinya dan menghapus baris
+                    // lanjutan. Dipanggil di 'afterprint' (dialog ditutup — baik
+                    // selesai maupun dibatalkan) dan sebelum mutasi berikutnya,
+                    // sehingga layout LAYAR selalu kembali persis seperti semula.
+                    var _printMutations = [];
+
+                    // Kartu realisasi yang tingginya MELEBIHI satu halaman cetak
+                    // tidak boleh dipaksa utuh di satu halaman (break-inside: avoid
+                    // akan mendorongnya utuh ke halaman berikutnya & menyisakan
+                    // halaman kosong — bug hal. 2). Kartu sedemikian ditandai
+                    // .realisasi-card-tall sehingga CSS memperbolehkan pemenggalan
+                    // alami antar halaman. Pemulihan: class dihapus di afterprint.
+                    function markTallRealisasiCards() {
+                        var pageH = window.innerHeight || 700;
+                        document.querySelectorAll('#print-area [data-realisasi-card]').forEach(function (card) {
+                            if (card.offsetHeight > pageH) {
+                                card.classList.add('realisasi-card-tall');
+                            }
+                        });
+                    }
+                    function unmarkTallRealisasiCards() {
+                        document.querySelectorAll('#print-area .realisasi-card-tall').forEach(function (card) {
+                            card.classList.remove('realisasi-card-tall');
+                        });
+                    }
+
+                    function applyPrintRowSplit() {
+                        // Bersihkan sisa mutasi sesi cetak sebelumnya dulu.
+                        restorePrintLayout();
+
+                        document.querySelectorAll('#print-area table tr').forEach(function (tr) {
+                            var tds = tr.children;
+                            // Hanya baris data realisasi: td kedua memuat kartu.
+                            if (!tds || tds.length < 2) return;
+                            var cardTd = tds[1];
+                            if (!cardTd || cardTd.tagName !== 'TD') return;
+                            var cards = cardTd.querySelectorAll(':scope > [data-realisasi-card]');
+                            if (cards.length === 0) return;
+
+                            var filled = Array.prototype.filter.call(cards, function (c) {
+                                return !c.classList.contains('realisasi-card-empty');
+                            });
+
+                            if (filled.length <= 1) {
+                                return;
+                            }
+
+                            // Beberapa realisasi: pindahkan kartu ke-2 dst ke baris lanjutan.
+                            var nCols = tds.length;
+                            var insertAfter = tr;
+                            filled.slice(1).forEach(function (card) {
+                                var splitRow = document.createElement('tr');
+                                splitRow.className = 'print-split-row';
+                                for (var i = 0; i < nCols; i++) {
+                                    var td = document.createElement('td');
+                                    if (i === 1) {
+                                        td.appendChild(card);
+                                    } else {
+                                        td.className = 'print-split-empty';
+                                    }
+                                    splitRow.appendChild(td);
+                                }
+                                insertAfter.after(splitRow);
+                                // Catat mutasi untuk pemulihan: kartu kembali ke
+                                // posisi semula (sebelum nextSibling awalnya), baris
+                                // lanjutan dihapus.
+                                _printMutations.push({
+                                    card: card,
+                                    originalParent: cardTd,
+                                    originalNext: card.nextSibling,
+                                    splitRow: splitRow
+                                });
+                                insertAfter = splitRow;
+                            });
+                        });
+                    }
+
+                    // Kembalikan struktur DOM ke kondisi SEBELUM cetak: kartu
+                    // dikembalikan ke td aslinya di urutan semula, baris lanjutan
+                    // dihapus, lalu catatan mutasi dikosongkan.
+                    function restorePrintLayout() {
+                        _printMutations.forEach(function (m) {
+                            m.originalParent.insertBefore(m.card, m.originalNext);
+                            m.splitRow.remove();
+                        });
+                        _printMutations = [];
+                    }
+                    window.addEventListener('beforeprint', applyPrintRowSplit);
+                    window.addEventListener('beforeprint', markTallRealisasiCards);
+                    // afterprint fire baik saat dialog DITUTUP setelah mencetak
+                    // maupun saat DIBATALKAN — layout layar selalu dipulihkan.
+                    window.addEventListener('afterprint', restorePrintLayout);
+                    window.addEventListener('afterprint', unmarkTallRealisasiCards);
+                    document.addEventListener('click', function (e) {
+                        if (e.target.closest && e.target.closest('button[onclick*="window.print"]')) {
+                            syncPrintRealisasi();
+                            applyPrintRowSplit();
+                            markTallRealisasiCards();
+                            // Kembalikan layout setelah dialog tertutup; window.print
+                            // sinkron di Chrome (memblokir sampai dialog ditutup).
+                            setTimeout(function () {
+                                restorePrintLayout();
+                                unmarkTallRealisasiCards();
+                            }, 0);
+                        }
+                    }, true);
+                </script>
 
             <div x-show="activeTab === 'skp'" class="area-cetak overflow-x-auto bg-white p-6 border border-gray-300 rounded-lg shadow-sm mb-6">
                 <div class="text-center font-bold mb-6 space-y-1">
@@ -237,38 +682,39 @@
                         
                         <tr>
                             <td class="text-center font-bold">1</td>
-                            <td><span class="inline-block w-48 font-bold">NAMA</span> <span>{{ $user->profile->nama_lengkap ?? $user->name ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NAMA</span> <span class="ident-value">{{ $user->profile->nama_lengkap ?? $user->name ?? '-' }}</span></td>
                             <td class="text-center font-bold">1</td>
-                            <td><span class="inline-block w-48 font-bold">NAMA</span> <span>{{ $penilai->profile->nama_lengkap ?? $penilai->name ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NAMA</span> <span class="ident-value">{{ $penilai->profile->nama_lengkap ?? $penilai->name ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">2</td>
-                            <td><span class="inline-block w-48 font-bold">NIP</span> <span>{{ $user->profile->nip ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NIP</span> <span class="ident-value">{{ $user->profile->nip ?? '-' }}</span></td>
                             <td class="text-center font-bold">2</td>
-                            <td><span class="inline-block w-48 font-bold">NIP</span> <span>{{ $penilai->profile->nip ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NIP</span> <span class="ident-value">{{ $penilai->profile->nip ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">3</td>
-                            <td><span class="inline-block w-48 font-bold">PANGKAT/GOL. RUANG</span> <span>{{ $user->profile->pangkat_golongan ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">PANGKAT/GOL. RUANG</span> <span class="ident-value">{{ $user->profile->pangkat_golongan ?? '-' }}</span></td>
                             <td class="text-center font-bold">3</td>
-                            <td><span class="inline-block w-48 font-bold">PANGKAT/ GOL. RUANG</span> <span>{{ $penilai->profile->pangkat_golongan ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">PANGKAT/GOL. RUANG</span> <span class="ident-value">{{ $penilai->profile->pangkat_golongan ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">4</td>
-                            <td><span class="inline-block w-48 font-bold">JABATAN</span> <span>{{ $user->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">JABATAN</span> <span class="ident-value">{{ $user->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
                             <td class="text-center font-bold">4</td>
-                            <td><span class="inline-block w-48 font-bold">JABATAN</span> <span>{{ $penilai->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">JABATAN</span> <span class="ident-value">{{ $penilai->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">5</td>
-                            <td><span class="inline-block w-48 font-bold">UNIT KERJA</span> Universitas Muhammadiyah Surabaya</td>
+                            <td><span class="inline-block w-48 font-bold ident-label">UNIT KERJA</span> <span class="ident-value">Universitas Muhammadiyah Surabaya</span></td>
                             <td class="text-center font-bold">5</td>
-                            <td><span class="inline-block w-48 font-bold">UNIT KERJA</span> Universitas Muhammadiyah Surabaya</td>
+                            <td><span class="inline-block w-48 font-bold ident-label">UNIT KERJA</span> <span class="ident-value">Universitas Muhammadiyah Surabaya</span></td>
                         </tr>
                     </tbody>
 
-                    <!-- HASIL KERJA -->
-                    <tbody>
+                    <!-- HASIL KERJA: judul grup + baris data pertama dalam satu tbody
+                         keep-with-next-print agar tidak tercetak sendirian di dasar halaman -->
+                    <tbody class="keep-with-next-print">
                         <tr class="bg-light-gray">
                             <td colspan="4" class="font-bold">HASIL KERJA</td>
                         </tr>
@@ -290,6 +736,8 @@
                                 <div class="whitespace-pre-wrap">{{ $skpKualitatif->indikator_target }}</div>
                             </td>
                         </tr>
+                        </tbody>
+                        <tbody>
 
                         <!-- Baris Tambahan Default A. Utama -->
                         <tr>
@@ -310,7 +758,11 @@
                             </td>
                         </tr>
 
-                        {{-- B. TAMBAHAN --}}
+                        {{-- B. TAMBAHAN: judul grup + baris data pertama di satu tbody
+                             dengan break-inside:avoid (class keep-with-next-print)
+                             agar judul tidak tercetak sendirian di dasar halaman. --}}
+                        </tbody>
+                        <tbody class="keep-with-next-print">
                         <tr>
                             <td colspan="4" class="font-bold bg-gray-50 p-2">
                                 <span>B. TAMBAHAN</span>
@@ -324,21 +776,26 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr>
+                            <tr class="empty-placeholder-print">
                                 <td class="text-center font-bold w-12 align-top pt-4">1</td>
                                 <td colspan="3" class="align-top text-gray-500 italic">
                                     Tidak ada target tambahan.
                                 </td>
                             </tr>
                         @endforelse
+                        @if($tambahans->isNotEmpty())
                     </tbody>
 
                     <!-- PERILAKU KERJA -->
-                    <tbody>
-                        <tr class="bg-light-gray">
-                            <td colspan="4" class="font-bold">PERILAKU KERJA*</td>
-                        </tr>
-                        @foreach($perilakus as $index => $perilaku)
+                     <tbody class="keep-with-next-print">
+                        @endif
+                         <tr class="bg-light-gray">
+                             <td colspan="4" class="font-bold">PERILAKU KERJA*</td>
+                         </tr>
+                         @foreach($perilakus as $index => $perilaku)
+                            @if($loop->first)
+                            <tbody>
+                            @endif
                             <tr>
                                 <td class="text-center font-bold w-12 align-top">{{ $index + 1 }}</td>
                                 <td colspan="2" class="align-top">
@@ -384,33 +841,33 @@
                     <tbody>
                         <tr>
                             <td class="text-center font-bold">1</td>
-                            <td><span class="inline-block w-48 font-bold">NAMA</span> <span>{{ $user->profile->nama_lengkap ?? $user->name ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NAMA</span> <span class="ident-value">{{ $user->profile->nama_lengkap ?? $user->name ?? '-' }}</span></td>
                             <td class="text-center font-bold">1</td>
-                            <td><span class="inline-block w-48 font-bold">NAMA</span> <span>{{ $penilai->profile->nama_lengkap ?? $penilai->name ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NAMA</span> <span class="ident-value">{{ $penilai->profile->nama_lengkap ?? $penilai->name ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">2</td>
-                            <td><span class="inline-block w-48 font-bold">NIP</span> <span>{{ $user->profile->nip ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NIP</span> <span class="ident-value">{{ $user->profile->nip ?? '-' }}</span></td>
                             <td class="text-center font-bold">2</td>
-                            <td><span class="inline-block w-48 font-bold">NIP</span> <span>{{ $penilai->profile->nip ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">NIP</span> <span class="ident-value">{{ $penilai->profile->nip ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">3</td>
-                            <td><span class="inline-block w-48 font-bold">PANGKAT/GOL. RUANG</span> <span>{{ $user->profile->pangkat_golongan ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">PANGKAT/GOL. RUANG</span> <span class="ident-value">{{ $user->profile->pangkat_golongan ?? '-' }}</span></td>
                             <td class="text-center font-bold">3</td>
-                            <td><span class="inline-block w-48 font-bold">PANGKAT/ GOL. RUANG</span> <span>{{ $penilai->profile->pangkat_golongan ?? '-' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">PANGKAT/GOL. RUANG</span> <span class="ident-value">{{ $penilai->profile->pangkat_golongan ?? '-' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">4</td>
-                            <td><span class="inline-block w-48 font-bold">JABATAN</span> <span>{{ $user->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">JABATAN</span> <span class="ident-value">{{ $user->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
                             <td class="text-center font-bold">4</td>
-                            <td><span class="inline-block w-48 font-bold">JABATAN</span> <span>{{ $penilai->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
+                            <td><span class="inline-block w-48 font-bold ident-label">JABATAN</span> <span class="ident-value">{{ $penilai->roles->pluck('name')->implode(', ') ?: 'Dosen' }}</span></td>
                         </tr>
                         <tr>
                             <td class="text-center font-bold">5</td>
-                            <td><span class="inline-block w-48 font-bold">UNIT KERJA</span> Universitas Muhammadiyah Surabaya</td>
+                            <td><span class="inline-block w-48 font-bold ident-label">UNIT KERJA</span> <span class="ident-value">Universitas Muhammadiyah Surabaya</span></td>
                             <td class="text-center font-bold">5</td>
-                            <td><span class="inline-block w-48 font-bold">UNIT KERJA</span> Universitas Muhammadiyah Surabaya</td>
+                            <td><span class="inline-block w-48 font-bold ident-label">UNIT KERJA</span> <span class="ident-value">Universitas Muhammadiyah Surabaya</span></td>
                         </tr>
                 </tbody>
             </table>
@@ -541,8 +998,16 @@
                                                 ? '{ id: ' . $childRow->id . ', text: ' . json_encode($childRow->realisasi ?? '') . ', file: ' . json_encode($childRow->bukti_dukung_url) . ', filename: ' . json_encode($childRow->bukti_dukung_nama) . ' }'
                                                 : '{ id: null, text: "", file: null, filename: "" }';
                                         @endphp
-                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }">
-                                            <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5">
+                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }" data-realisasi-card>
+                                            {{-- Teks khusus cetak: judul subbab + isi realisasi, tampil
+                                                 di print sebagai teks biasa menggantikan kontrol form.
+                                                 Nama/tautan file bukti TIDAK dicetak. Judul layar
+                                                 (.realisasi-label-screen) disembunyikan saat print.
+                                                 data-print-fallback = snapshot teks tersimpan server,
+                                                 dipakai bila textarea kosong saat cetak. --}}
+                                            <div class="print-only font-bold text-xs mb-1" data-label-print>{{ $cLabel }}</div>
+                                            <div class="print-only break-words" data-realisasi-print data-print-fallback="{{ $childRow->realisasi ?? '' }}">{{ $childRow->realisasi ?? '' }}</div>
+                                            <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5 realisasi-label-screen">
                                                 <i class="fas fa-paperclip text-blue-600"></i>
                                                 <span>{{ $cLabel }}</span>
                                             </div>
@@ -553,8 +1018,13 @@
                                                    value="{{ $childRow->label_realisasi ?? '' }}" placeholder="{{ $cLabel }}"
                                                    class="w-full border rounded text-xs p-2 mb-2 {{ $isRealisasiSaved ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white border-gray-300' }}"
                                                    {{ $isRealisasiSaved ? 'disabled' : '' }}>
-                                            <textarea x-model="item.text" x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = ($el.scrollHeight + 4) + 'px' } }" x-init="$nextTick(() => resize())" @input="resize()" class="w-full rounded-md shadow-sm text-xs p-2.5 overflow-hidden resize-none {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." name="realisasi[utama][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
-                                            <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100">
+                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." name="realisasi[utama][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
+                                            @unless($isRealisasiSaved)
+                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                            @endunless
+                                            </div>
+                                            <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
                                                 @if(!$isRealisasiSaved)
                                                 <label class="text-xs font-bold text-blue-800 mb-1.5 flex items-center gap-1">
                                                     <i class="fas fa-cloud-upload-alt"></i> Upload Bukti <span class="text-red-500" x-show="!item.file">*</span>
@@ -564,14 +1034,15 @@
                                                     <a :href="'/' + item.file" target="_blank" class="text-xs text-blue-600 hover:underline"><i class="fas fa-file mr-1"></i> <span x-text="item.filename"></span></a>
                                                 </div>
                                                 @if(!$isRealisasiSaved)
-                                                <input type="file" name="bukti_dukung[utama][{{ $child->id }}]" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md">
+                                                <input type="file" data-pdf-input name="bukti_dukung[utama][{{ $child->id }}]" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md">
+                                                <p data-pdf-status class="text-[10px] mt-1 italic hidden"></p>
                                                 <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                                 @endif
                                             </div>
                                         </div>
                                     @endforeach
                                 @else
-                                <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic">
+                                <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic no-print">
                                     <i class="fas fa-info-circle mr-1"></i> Tidak wajib lampiran
                                 </div>
                                 @endif
@@ -586,6 +1057,9 @@
                                     <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                     <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                 </select>
+                                {{-- Nilai hasil kerja khusus cetak: select disembunyikan
+                                     saat print, nilainya diwakili teks print-only ini. --}}
+                                <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                             </td>
                             <td class="align-middle text-center hidden">
                                 <input type="number" :value="hasilKerjaMap[selectedHasilKerja]" readonly tabindex="-1" class="w-16 border-gray-200 bg-gray-50 rounded-md shadow-inner text-center font-bold text-gray-600 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none">
@@ -593,7 +1067,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="5" class="text-center text-gray-500 italic py-4">Belum ada data Kinerja Utama.</td>
+                            <td colspan="5" class="text-center text-gray-500 italic py-4 empty-placeholder-print">Belum ada data Kinerja Utama.</td>
                         </tr>
                         @endforelse
                         <tr>
@@ -621,7 +1095,12 @@
                             @endphp
                             <td class="align-top" x-data="{ items: {{ $tData }} }">
                                 <template x-for="(item, index) in items" :key="item.id">
-                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md relative group">
+                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md relative group" data-realisasi-card>
+                                        {{-- Teks khusus cetak: ikut state Alpine (item.text) karena
+                                             textarea masih bisa diedit sebelum disimpan.
+                                             data-print-fallback = teks tersimpan server (item pertama). --}}
+                                        <div class="print-only font-bold text-xs mb-1" data-label-print>Realisasi</div>
+                                        <div class="print-only break-words" data-realisasi-print data-print-fallback="{{ $rTambahan->first()->realisasi ?? '' }}"><span x-text="(index + 1) + '.'"></span> <span x-text="item.text"></span></div>
                                         @if(!$isRealisasiSaved)
                                         <button @click="items.splice(index, 1)" x-show="items.length > 1" type="button" class="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus">
                                             <i class="fas fa-trash-alt"></i>
@@ -629,9 +1108,14 @@
                                         @endif
                                         <div class="flex items-start gap-2 mb-3 pr-6">
                                             <span class="font-bold text-gray-700 mt-1" x-text="(index + 1) + '.'"></span>
-                                            <textarea x-model="item.text" x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = ($el.scrollHeight + 4) + 'px' } }" x-init="$nextTick(() => resize())" @input="resize()" class="w-full rounded-md shadow-sm text-xs p-2.5 overflow-hidden resize-none {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." :name="'realisasi[tambahan][' + {{ $tambahan->id }} + '][]'" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}></textarea>
+                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." :name="'realisasi[tambahan][' + {{ $tambahan->id }} + '][]'" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}></textarea>
+                                            @unless($isRealisasiSaved)
+                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                            @endunless
+                                            </div>
                                         </div>
-                                        <div class="ml-6 bg-blue-50 p-2.5 rounded border border-blue-100">
+                                        <div class="ml-6 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
                                             @if(!$isRealisasiSaved)
                                             <label class="text-xs font-bold text-blue-800 mb-1.5 flex items-center gap-1">
                                                 <i class="fas fa-cloud-upload-alt"></i> Upload Bukti <span class="text-red-500" x-show="!item.file">*</span>
@@ -641,7 +1125,8 @@
                                                 <a :href="'/' + item.file" target="_blank" class="text-xs text-blue-600 hover:underline"><i class="fas fa-file mr-1"></i> <span x-text="item.filename"></span></a>
                                             </div>
                                             @if(!$isRealisasiSaved)
-                                            <input type="file" :name="'bukti_dukung[tambahan][' + {{ $tambahan->id }} + '][]'" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md" multiple>
+                                            <input type="file" data-pdf-input :name="'bukti_dukung[tambahan][' + {{ $tambahan->id }} + '][]'" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md" multiple>
+                                            <p data-pdf-status class="text-[10px] mt-1 italic hidden"></p>
                                             <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                             @endif
                                         </div>
@@ -663,34 +1148,44 @@
                                     <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                     <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                 </select>
+                                {{-- Nilai hasil kerja khusus cetak (B. TAMBAHAN). --}}
+                                <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                             </td>
                             <td class="align-middle text-center hidden">
                                 <input type="number" :value="hasilKerjaMap[selectedHasilKerja]" readonly tabindex="-1" class="w-16 border-gray-200 bg-gray-50 rounded-md shadow-inner text-center font-bold text-gray-600 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none">
                             </td>
                         </tr>
                         @empty
-                        <tr>
+                        <tr class="empty-placeholder-print">
                             <td colspan="5" class="text-center text-gray-500 italic py-4">Tidak ada target tambahan.</td>
                         </tr>
                         @endforelse
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left">
                                 <div class="mb-2">RATING HASIL KERJA*</div>
-                                <textarea :value="rating" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="rating" readonly tabindex="-1" class="print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                {{-- Nilai rating khusus cetak: textarea terikat :value
+                                     Alpine (bukan isi server) sehingga tidak ikut
+                                     tercetak; diwakili teks print-only berikut. --}}
+                                <span class="print-only font-bold" x-text="rating || '-'"></span>
                             </td>
                         </tr>
                         </tbody>
                 </table>
 
                 <table class="table-kualitatif table-perilaku w-full mb-6" style="table-layout: fixed;">
-                    <tbody>
-                        <!-- PERILAKU KERJA SECTION -->
+                    {{-- Header di <thead>: Chromium mengulang thead di halaman lanjutan
+                         saat tabel terpotong, dan rule thead pada @media print mencegah
+                         header tercetak sendirian di dasar halaman. --}}
+                    <thead>
                         <tr class="bg-gray-50 text-xs border-t-2 border-b-2 border-gray-300">
                             <th colspan="2" class="p-2 text-left w-[45%]">PERILAKU KERJA</th>
-                            <th class="p-2 text-center w-[25%] no-print">REALISASI PEGAWAI &amp; BUKTI DUKUNG</th>
+                            <th class="p-2 text-center w-[25%]">REALISASI PEGAWAI &amp; BUKTI DUKUNG</th>
                             <th class="p-2 text-center w-[20%]">UMPAN BALIK BERKELANJUTAN BERDASARKAN BUKTI DUKUNG</th>
                             <th class="p-2 text-center w-[10%]">HASIL KERJA</th>
                         </tr>
+                    </thead>
+                    <tbody>
                         @php
                             // Helper label singkat untuk kotak upload perilaku (sama persis pola
                             // dengan utamaLabel di section A -- struktur datanya kompatibel).
@@ -746,7 +1241,7 @@
                                     $perilakuChildren = $acuanForAspek->children->where('butuh_lampiran', true)->values();
                                 }
                             @endphp
-                            <td class="align-top no-print">
+                            <td class="align-top">
                                 @if($perilakuChildren->isNotEmpty())
                                     @foreach($perilakuChildren as $cIdx => $child)
                                         @php
@@ -764,8 +1259,12 @@
                                                 ? '{ id: ' . $childRow->id . ', text: ' . json_encode($childRow->realisasi ?? '') . ', file: ' . json_encode($childRow->bukti_dukung_url) . ', filename: ' . json_encode($childRow->bukti_dukung_nama) . ' }'
                                                 : '{ id: null, text: "", file: null, filename: "" }';
                                         @endphp
-                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }">
-                                            <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5">
+                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }" data-realisasi-card>
+                                            {{-- Teks khusus cetak: judul subbab + isi realisasi.
+                                                 Nama/tautan file bukti TIDAK dicetak sesuai permintaan. --}}
+                                            <div class="print-only font-bold text-xs mb-1" data-label-print>{{ $cLabel }}</div>
+                                            <div class="print-only break-words" data-realisasi-print data-print-fallback="{{ $childRow->realisasi ?? '' }}">{{ $childRow->realisasi ?? '' }}</div>
+                                            <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5 realisasi-label-screen">
                                                 <i class="fas fa-paperclip text-blue-600"></i>
                                                 <span>{{ $cLabel }}</span>
                                             </div>
@@ -776,8 +1275,13 @@
                                                    value="{{ $childRow->label_realisasi ?? '' }}" placeholder="{{ $cLabel }}"
                                                    class="w-full border rounded text-xs p-2 mb-2 {{ $isRealisasiSaved ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white border-gray-300' }}"
                                                    {{ $isRealisasiSaved ? 'disabled' : '' }}>
-                                            <textarea x-model="item.text" x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = ($el.scrollHeight + 4) + 'px' } }" x-init="$nextTick(() => resize())" @input="resize()" class="w-full rounded-md shadow-sm text-xs p-2.5 overflow-hidden resize-none {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-blue-500 focus:ring-blue-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi perilaku kerja..." name="realisasi[perilaku][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
-                                            <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100">
+                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-blue-500 focus:ring-blue-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi perilaku kerja..." name="realisasi[perilaku][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
+                                            @unless($isRealisasiSaved)
+                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                            @endunless
+                                            </div>
+                                            <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
                                                 @if(!$isRealisasiSaved)
                                                 <label class="text-xs font-bold text-blue-800 mb-1.5 flex items-center gap-1">
                                                     <i class="fas fa-cloud-upload-alt"></i> Upload Bukti <span class="text-red-500" x-show="!item.file">*</span>
@@ -787,14 +1291,15 @@
                                                     <a :href="'/' + item.file" target="_blank" class="text-xs text-blue-600 hover:underline"><i class="fas fa-file mr-1"></i> <span x-text="item.filename"></span></a>
                                                 </div>
                                                 @if(!$isRealisasiSaved)
-                                                <input type="file" name="bukti_dukung[perilaku][{{ $child->id }}]" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md">
+                                                <input type="file" data-pdf-input name="bukti_dukung[perilaku][{{ $child->id }}]" x-bind:required="!item.file" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer border border-gray-300 bg-white rounded-md">
+                                                <p data-pdf-status class="text-[10px] mt-1 italic hidden"></p>
                                                 <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                                 @endif
                                             </div>
                                         </div>
                                     @endforeach
                                 @else
-                                <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic">
+                                <div class="bg-gray-100 border border-gray-200 border-dashed rounded-md p-4 text-center text-xs text-gray-400 italic no-print">
                                     <i class="fas fa-info-circle mr-1"></i> Tidak wajib lampiran
                                 </div>
                                 @endif
@@ -809,19 +1314,23 @@
                                     <option value="Diatas Ekspektasi">Diatas Ekspektasi</option>
                                     <option value="Dibawah Ekspektasi">Dibawah Ekspektasi</option>
                                 </select>
+                                {{-- Nilai hasil kerja khusus cetak (tabel Perilaku Kerja). --}}
+                                <span class="print-only font-bold" x-text="selectedHasilKerja || '-'"></span>
                             </td>
                         </tr>
                         @endforeach
 <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left border-t border-gray-200">
                                 <div class="mb-2">RATING PERILAKU KERJA*</div>
-                                <textarea :value="ratingPerilaku" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="ratingPerilaku" readonly tabindex="-1" class="print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <span class="print-only font-bold" x-text="ratingPerilaku || '-'"></span>
                             </td>
                         </tr>
                         <tr>
                             <td colspan="5" class="font-bold bg-gray-50 p-4 text-left border-t border-gray-200">
                                 <div class="mb-2">PREDIKAT KINERJA PEGAWAI*</div>
-                                <textarea :value="predikatKinerja" readonly tabindex="-1" class="w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <textarea :value="predikatKinerja" readonly tabindex="-1" class="print-hidden w-full border-gray-200 bg-gray-100 rounded-md shadow-inner text-left font-bold text-gray-700 focus:ring-0 focus:border-gray-200 cursor-not-allowed select-none resize-none" rows="1"></textarea>
+                                <span class="print-only font-bold" x-text="predikatKinerja || '-'"></span>
                             </td>
                         </tr>
 </tbody>

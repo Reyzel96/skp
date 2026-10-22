@@ -58,14 +58,77 @@
                 }
 
                 @media print {
-                    .print-area > div[x-show] { display: block !important; }
-                    .print-area [x-cloak] { display: block !important; }
-                    .print-area form,
-                    .print-area input,
-                    .print-area textarea,
-                    .print-area select,
-                    .print-area button { display: none !important; }
-                    .print-area > div { border: none !important; box-shadow: none !important; }
+                    /* HANYA tab aktif yang dicetak: panel non-aktif tetap mengikuti
+                       kondisi Alpine (inline display:none dari x-show + x-cloak).
+                       Tidak ada rule yang memaksa panel tersembunyi tampil saat print.
+                       (Selector .print-area lama tidak pernah match — main layout
+                       hanya punya id="print-area", bukan class — jadi rule forcing
+                       lama sebenarnya mati; dihapus agar tidak menyesatkan.) */
+                    #print-area [x-cloak] { display: none !important; }
+
+                    /* Kontrol form tidak ikut tercetak (form approval ada di blok
+                       no-print, ini pengaman tambahan). */
+                    #print-area form,
+                    #print-area input,
+                    #print-area select,
+                    #print-area button { display: none !important; }
+
+                    /* Bingkai kartu layar pada wrapper tab dipoloskan & diambil
+                       padding/margin-nya agar hasil cetak rapi seperti dokumen
+                       resmi dan tidak menyisakan halaman ekstra. */
+                    #print-area div[x-show] {
+                        border: none !important;
+                        box-shadow: none !important;
+                        padding: 0 !important;
+                        margin-bottom: 0 !important;
+                    }
+
+                    /* Judul grup (HASIL KERJA, A. UTAMA, B. TAMBAHAN, PERILAKU
+                       KERJA*) jangan tercetak sendirian di dasar halaman —
+                       selalu bersama baris data pertama setelahnya. */
+                    #print-area table.table-kualitatif tr:has(+ tr) td[colspan]:only-child {
+                        page-break-after: avoid;
+                        break-after: avoid;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
+
+                    /* Baris placeholder internal tidak dicetak. */
+                    #print-area tr.empty-placeholder-print,
+                    #print-area td.empty-placeholder-print { display: none !important; }
+
+                    /* Teks panjang membungkus di dalam sel. */
+                    #print-area table.table-kualitatif td { overflow-wrap: break-word; }
+
+                    /* Jarak antar tabel dirapatkan; tabel terakhir tanpa margin
+                       agar tidak memicu halaman ekstra. */
+                    #print-area table.table-kualitatif { margin-bottom: 10px !important; }
+                    #print-area table.table-kualitatif:last-of-type { margin-bottom: 0 !important; }
+
+                    /* Border bawah baris tabel yang terpotong pindah halaman:
+                          Chromium mode border-collapse:collapse TIDAK menggambar
+                          border bawah fragmen baris saat baris panjang terbelah
+                          di batas halaman. Solusi khusus cetak: model border
+                          terpisah (separate) dengan border per-sel — setiap
+                          fragmen sel menggambar border sendiri sehingga
+                          potongan halaman selalu tertutup garis rapi.
+                          Tanpa efek di layar (hanya @media print). */
+                    #print-area table.table-kualitatif {
+                        border-collapse: separate !important;
+                        border-spacing: 0 !important;
+                    }
+                    #print-area table.table-kualitatif td,
+                    #print-area table.table-kualitatif th {
+                        border-bottom: 1px solid #000 !important;
+                        border-right: 1px solid #000 !important;
+                        border-left: 1px solid #000 !important;
+                        border-top: none !important;
+                    }
+                    #print-area table.table-kualitatif thead th,
+                    #print-area table.table-kualitatif tr:first-child th,
+                    #print-area table.table-kualitatif tr:first-child td {
+                        border-top: 1px solid #000 !important;
+                    }
                 }
             </style>
 

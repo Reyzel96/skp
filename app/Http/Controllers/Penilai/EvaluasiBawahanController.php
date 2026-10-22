@@ -41,6 +41,37 @@ class EvaluasiBawahanController extends Controller
         return view('penilai.evaluasi.index', compact('pendingHeaders', 'historyHeaders', 'isBypassRole'));
     }
 
+    /**
+     * Export PDF tab yang sedang aktif di halaman Evaluasi Bawahan (SKP Dosen Kualitatif).
+     * Render server-side via DomPDF — hasil bebas header/footer browser (tanpa URL).
+     * Query param ?tab= skp|lampiran|evaluasi|dokumen (default: evaluasi).
+     */
+    public function exportPdfKualitatif(Request $request, $header_id)
+    {
+        // Izinkan hanya tab yang dikenal.
+        $tab = $request->query('tab', 'evaluasi');
+        if (!in_array($tab, ['skp', 'lampiran', 'evaluasi', 'dokumen'], true)) {
+            $tab = 'evaluasi';
+        }
+
+        // Muat data yang sama persis dengan show() — cukup render view utama
+        // dengan flag export, sehingga isi & urutan selalu konsisten dgn layar.
+        $response = app()->call([$this, 'show'], ['header_id' => $header_id]);
+        if (!$response instanceof \Illuminate\View\View) {
+            return $response; // abort() dari show() (403 dsb.) diteruskan apa adanya
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('penilai.evaluasi.export-kualitatif', [
+                'contentView' => $response->getName(),
+                'data'        => $response->getData(),
+                'exportTab'   => $tab,
+            ])
+            ->setPaper('a4', 'landscape');
+
+        $namaFile = 'SKP-Kualitatif-' . ($tab) . '-' . $header_id . '.pdf';
+        return $pdf->stream($namaFile);
+    }
+
     public function show($header_id)
     {
         $penilai = Auth::user();

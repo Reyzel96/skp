@@ -77,9 +77,9 @@
                 page-break-inside: avoid;
             }
             #print-area table td, #print-area table th {
-                padding: 4px 6px !important;
-                font-size: 11px !important;
-                line-height: 1.3 !important;
+                padding: 5px 7px !important;
+                font-size: 12px !important;
+                line-height: 1.35 !important;
             }
             #print-area textarea {
                 min-height: 30px !important;
@@ -87,24 +87,17 @@
                 overflow: visible !important;
             }
 
-            /* Perbaikan kolom kosong & lebar tabel Perilaku Kerja saat print:
-               kolom "REALISASI & BUKTI DUKUNG" disembunyikan (.no-print),
-               sisa kolom diberi lebar tetap agar tidak ada ruang kosong
-               dan kolom UMPAN BALIK lebih lega (~32%). */
-            /* Perbaikan kolom kosong di tabel Perilaku Kerja saat print:
-               kolom "REALISASI & BUKTI DUKUNG" disembunyikan (.no-print),
-               jadi biarkan sisa kolom auto melebar mengisi 100% lebar tabel. */
+            /* Tabel Perilaku Kerja saat print: kolom "REALISASI PEGAWAI & BUKTI
+               DUKUNG" KINI IKUT DICETAK (td no-print dihapus dari show.blade.php),
+               jadi layout kolom biarkan auto mengikuti proporsi aslinya. */
             #print-area table.table-perilaku {
                 table-layout: auto !important;
             }
-            #print-area table.table-perilaku th,
-            #print-area table.table-perilaku td {
-                width: auto !important;
-            }
 
-            /* Perlebar khusus kolom UMPAN BALIK di tabel Perilaku Kerja saat print,
-               tanpa menyentuh kolom lain (untuk hindari blank column berulang). */
-            #print-area table.table-perilaku thead th:nth-child(3),
+            /* Perlebar khusus kolom UMPAN BALIK di tabel Perilaku Kerja saat print
+               (thead th ke-4 / tbody td ke-4 karena kolom realisasi sekarang tampil),
+               tanpa menyentuh kolom lain. */
+            #print-area table.table-perilaku thead th:nth-child(4),
             #print-area table.table-perilaku tbody td:nth-child(4) {
                 width: 30% !important;
             }
