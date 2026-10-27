@@ -6,6 +6,28 @@
     @endsection
 
     @section('content')
+    <style>
+        /* Ctrl+P dimatikan: saat print langsung dari halaman ini (format lama),
+           sembunyikan seluruh isi dan tampilkan pesan pengarah ke tombol Print.
+           Cetak resmi hanya lewat tombol Print (halaman print baru). */
+        #print-legacy-blocker { display: none; }
+        @media print {
+            @page { size: A4 portrait; }
+            body * { display: none !important; }
+            #print-legacy-blocker {
+                display: block !important;
+                position: fixed;
+                inset: 0;
+                padding: 60px 24px;
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 16px;
+                font-weight: bold;
+                color: #000;
+                text-align: center;
+            }
+        }
+    </style>
+    <div id="print-legacy-blocker">Gunakan tombol Print di halaman untuk mencetak SKP.</div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let evaluasiChartInstance = null;
@@ -152,9 +174,9 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
-                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
+                    <a :href="'{{ route('pegawai.skp-dosen-kualitatif.print', $skpKualitatif->skpHeader->id) }}?tab=' + activeTab" target="_blank" href="{{ route('pegawai.skp-dosen-kualitatif.print', $skpKualitatif->skpHeader->id) }}?tab=skp" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-print mr-2"></i> Print
-                    </button>
+                    </a>
                 </div>
             </div>
 

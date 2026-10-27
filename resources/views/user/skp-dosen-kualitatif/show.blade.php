@@ -152,9 +152,11 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
-                    <button type="button" onclick="window.print()" class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
+                    <a :href="'{{ route('pegawai.skp-dosen-kualitatif.print', $skpKualitatif->skpHeader->id) }}?tab=' + activeTab"
+                        target="_blank"
+                        class="no-print inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-print mr-2"></i> Print
-                    </button>
+                    </a>
 @if(strtolower($skpKualitatif->skpHeader->status ?? '') != 'draft' && !($isRealisasiSaved ?? false))
                     <button type="button" @click="activeTab = 'evaluasi'; $nextTick(() => document.getElementById('formEvaluasiPegawai').requestSubmit())" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
                         <i class="fas fa-save mr-2"></i> Simpan Realisasi
@@ -208,7 +210,27 @@
                    Tersembunyi di layar, ditampilkan hanya saat print. */
                 .print-only { display: none !important; }
 
+                /* R3 — garis pemisah antar kartu realisasi (kartu ke-2 dst) di
+                   layar. Berlaku untuk kartu hasil loop @@foreach (UTAMA/PERILAKU)
+                   maupun x-for (TAMBAHAN) karena semua kartu adalah elemen
+                   [data-realisasi-card] yang bersaudara langsung di satu td.
+                   Saat print rule ini tidak berlaku (di luar @@media print) —
+                   pemisah versi cetak memakai .print-split yang terpisah. */
+                [data-realisasi-card] + [data-realisasi-card] {
+                    border-top: 1px solid #d1d5db; /* gray-300 */
+                    margin-top: 0.75rem;
+                    padding-top: 0.75rem;
+                }
+
                 @media print {
+                    /* Gap halaman cetak: margin @page dinaikkan 1cm -> 1.5cm
+                          (disetel di sini, TIDAK di layouts/app.blade.php) agar ada
+                          jarak antara header halaman browser, isi tabel, dan footer
+                          halaman. <style> view ini dimuat SETELAH style layout,
+                          sehingga deklarasi @page di sini menang (cascade sama-
+                          specificity) dan hanya berlaku saat mencetak halaman ini. */
+                    @page { margin: 1.5cm 1cm; }
+
                     /* 1) Sembunyikan kontrol form & tombol (input file, input teks,
                           select, tombol tambah/hapus). Textarea realisasi ikut
                           disembunyikan dan isinya digantikan elemen .print-only.
@@ -309,6 +331,15 @@
                           halaman berikutnya bila tidak muat. */
                     #print-area table { page-break-inside: auto; }
                     #print-area tr { page-break-inside: auto; }
+                    /* Pengecualian 6b-4: baris tabel HASIL KERJA (table-kualitatif)
+                       tidak boleh terbelah — fragmen sel di dasar halaman
+                       menggambar garis sendiri & menyisakan potongan ("-" saja)
+                       di halaman lanjutan. Kartu realisasi panjang tetap boleh
+                       dipecah lewat .realisasi-card-tall (rule di bawah). */
+                    #print-area table.table-kualitatif tr {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
                     /* Kartu realisasi tidak boleh terpotong di tengah — TAPI hanya
                        bila muat dalam satu halaman. Kartu sangat panjang (lebih tinggi
                        dari 1 halaman) dengan avoid akan didorong UTUH ke halaman
@@ -361,13 +392,18 @@
                     #print-area table.table-kualitatif:has([data-realisasi-card]) tbody td:nth-child(4) { width: 14% !important; }
 
                     /* 6b) Judul tabel tidak terpisah dari baris isinya saat
-                           halaman berganti. */
-                    #print-area table.table-kualitatif thead { page-break-inside: avoid; break-inside: avoid; }
+                           halaman berganti. TIDAK boleh table-header-group:
+                           itu menyuruh Chromium mengulang thead di SETIAP
+                           halaman cetak (bug header HASIL KERJA berulang di
+                           hal. 3). table-row-group = thead dicetak sekali. */
+                    #print-area table.table-kualitatif thead { page-break-inside: avoid; break-inside: avoid; display: table-row-group; }
                     #print-area table.table-kualitatif thead th { page-break-after: avoid; break-after: avoid; }
                     /* Header tabel perilaku (PERILAKU KERJA | REALISASI | UMPAN BALIK | HASIL KERJA)
                        jangan terpisah dari baris pertamanya — sebelumnya nyangkut sendirian
-                       di dasar halaman (bug hal. 4). */
-                    #print-area table.table-perilaku thead { page-break-inside: avoid; break-inside: avoid; }
+                       di dasar halaman (bug hal. 4). TIDAK boleh table-header-group:
+                       itu menyuruh Chromium mengulang thead di SETIAP halaman cetak.
+                       table-row-group = thead dicetak sekali di atas tabel saja. */
+                    #print-area table.table-perilaku thead { page-break-inside: avoid; break-inside: avoid; display: table-row-group; }
                     #print-area table.table-perilaku thead th { page-break-after: avoid; break-after: avoid; }
                     /* Baris tabel kualitatif: baris pertama grup (A. UTAMA dst.) jangan
                        terpisah dari isi di belakangnya. */
@@ -381,6 +417,15 @@
                     #print-area table.table-perilaku tbody.keep-with-next-print {
                         page-break-inside: avoid;
                         break-inside: avoid;
+                    }
+
+                    /* 6b-4) Baris penutup tabel HASIL KERJA: judul seksi
+                           "B. TAMBAHAN" (dan "A. UTAMA") tidak boleh tercetak
+                           sendirian di dasar halaman — break-after: avoid
+                           menahannya bersama baris data pertama di belakangnya. */
+                    #print-area table.table-kualitatif tr > td[colspan="5"].font-bold {
+                        page-break-after: avoid;
+                        break-after: avoid;
                     }
 
                     /* 6c) Tipografi cetak: isi utama minimal 9pt agar tetap
@@ -405,17 +450,15 @@
                           beberapa lampiran tersusun kompak satu di bawah yang lain. */
                     #print-area [data-realisasi-card] { margin-bottom: 6px !important; }
 
-                    /* 8) Opsi B — pemecahan baris untuk baris yang berisi BEBERAPA
-                          kartu realisasi: kartu pertama tetap di baris asli
-                          (sejajar kolom Hasil Kerja), kartu berikutnya dipindah
-                          applyPrintRowSplit() ke baris lanjutan tersendiri sehingga
-                          tinggi tiap baris mengikuti isinya — tidak ada ruang kosong
-                          besar di bawah teks yang pendek. Sel pengiri/pengisi baris
-                          lanjutan tanpa garis & tanpa padding sehingga tercetak
-                          hanya kotak realisasinya (tampak seperti lanjutan baris). */
-                    #print-area tr.print-split-row > td.print-split-empty {
-                        border: none !important;
-                        padding: 0 !important;
+                    /* 8) R4 — pemisah antar dokumen dalam SATU td: kartu ke-2 dst
+                          diberi garis atas tipis + jarak (class print-split,
+                          dipasang applyPrintRowSplit()); kartu pertama tanpa
+                          garis atas. Semua dokumen tetap di dalam td yang sama,
+                          tersusun ke bawah — tidak ada <tr> lanjutan. */
+                    #print-area [data-realisasi-card].print-split {
+                        border-top: 1px solid #666 !important;
+                        padding-top: 6px !important;
+                        margin-top: 6px !important;
                     }
 
                     /* 9) Kasus SATU realisasi: TIDAK ada penyeimbang vertikal.
@@ -461,22 +504,54 @@
                           terpisah (separate) dengan border per-sel — setiap
                           fragmen sel menggambar border sendiri sehingga
                           potongan halaman selalu tertutup garis rapi.
-                          Tanpa efek di layar (hanya @media print). */
+                          Tanpa efek di layar (hanya @media print).
+
+                          SEMUA garis 1px solid #000 seragam (luar & dalam):
+                          - Border 2px pada elemen TABLE (rule .table-kualitatif
+                            di atas) dinetralkan — bila dibiarkan, sisi luar
+                            = 2px (table) + 1px (sel) berdampingan = garis
+                            ganda/tebal karena separate tidak meleburkan border.
+                          - Horizontal digambar SATU kali: SEMUA sel punya
+                            border-TOP 1px, border-bottom none. Fragmen baris
+                            yang terpotong ke halaman berikutnya otomatis
+                            bergaris atas — tidak ada baris tanpa garis atas
+                            di halaman lanjutan. Penutup dasar tabel diberi
+                            rule terpisah pada baris terakhir tiap tbody.
+                          - Vertikal digambar SATU kali: SEMUA sel punya
+                            border-RIGHT 1px; garis kiri hanya pada
+                            :first-child tiap baris — tidak ada 1px kanan +
+                            1px kiri yang berdempetan, dan kolom terlihat
+                            terakhir SELALU tertutup garis kanan (tidak
+                            bergantung :last-child, yang pada tabel HASIL
+                            KERJA jatuh ke sel ANGKA class="hidden" yang
+                            tidak menggambar border apa pun).
+                          - Sel yang di-span (colspan/rowspan) tetap mendapat
+                            garis yang sama, termasuk baris judul seksi
+                            (A. UTAMA / B. TAMBAHAN / PERILAKU KERJA*) sehingga
+                            bergaris identik dengan baris data.
+                          - Dilarang kombinasi bottom+top bertumpuk = 2px:
+                            border-bottom per sel DIHAPUS total (garis bawah
+                            tiap baris justru berasal dari border-top baris
+                            berikutnya). */
                     #print-area table.table-kualitatif {
                         border-collapse: separate !important;
                         border-spacing: 0 !important;
+                        border: none !important; /* netralkan 2px border table (garis luar cukup dari sel) */
                     }
                     #print-area table.table-kualitatif td,
                     #print-area table.table-kualitatif th {
-                        border-bottom: 1px solid #000 !important;
-                        border-right: 1px solid #000 !important;
-                        border-left: 1px solid #000 !important;
-                        border-top: none !important;
-                    }
-                    #print-area table.table-kualitatif thead th,
-                    #print-area table.table-kualitatif tr:first-child th,
-                    #print-area table.table-kualitatif tr:first-child td {
                         border-top: 1px solid #000 !important;
+                        border-right: 1px solid #000 !important;
+                        border-bottom: none !important;
+                        border-left: none !important;
+                    }
+                    /* Garis kiri tabel: sel pertama tiap baris saja. */
+                    #print-area table.table-kualitatif tr > *:first-child {
+                        border-left: 1px solid #000 !important;
+                    }
+                    /* Penutup dasar tabel: baris terakhir tiap tbody. */
+                    #print-area table.table-kualitatif tbody > tr:last-child > td {
+                        border-bottom: 1px solid #000 !important;
                     }
                 }
                 </style>
@@ -581,63 +656,39 @@
                     }
 
                     function applyPrintRowSplit() {
-                        // Bersihkan sisa mutasi sesi cetak sebelumnya dulu.
+                        // R4: SATU <tr> per indikator, SATU <td> realisasi — semua
+                        // dokumen TETAP di dalam td yang sama, tersusun ke bawah.
+                        // Tidak ada <tr> baru untuk dokumen ke-2 dst. Pemisah antar
+                        // dokumen ditangani CSS: kartu ke-2 dst diberi class
+                        // print-split (border-top garis + padding/margin), kartu
+                        // pertama tanpa garis atas.
                         restorePrintLayout();
 
                         document.querySelectorAll('#print-area table tr').forEach(function (tr) {
                             var tds = tr.children;
-                            // Hanya baris data realisasi: td kedua memuat kartu.
                             if (!tds || tds.length < 2) return;
                             var cardTd = tds[1];
                             if (!cardTd || cardTd.tagName !== 'TD') return;
                             var cards = cardTd.querySelectorAll(':scope > [data-realisasi-card]');
-                            if (cards.length === 0) return;
 
                             var filled = Array.prototype.filter.call(cards, function (c) {
                                 return !c.classList.contains('realisasi-card-empty');
                             });
 
-                            if (filled.length <= 1) {
-                                return;
-                            }
-
-                            // Beberapa realisasi: pindahkan kartu ke-2 dst ke baris lanjutan.
-                            var nCols = tds.length;
-                            var insertAfter = tr;
-                            filled.slice(1).forEach(function (card) {
-                                var splitRow = document.createElement('tr');
-                                splitRow.className = 'print-split-row';
-                                for (var i = 0; i < nCols; i++) {
-                                    var td = document.createElement('td');
-                                    if (i === 1) {
-                                        td.appendChild(card);
-                                    } else {
-                                        td.className = 'print-split-empty';
-                                    }
-                                    splitRow.appendChild(td);
-                                }
-                                insertAfter.after(splitRow);
-                                // Catat mutasi untuk pemulihan: kartu kembali ke
-                                // posisi semula (sebelum nextSibling awalnya), baris
-                                // lanjutan dihapus.
-                                _printMutations.push({
-                                    card: card,
-                                    originalParent: cardTd,
-                                    originalNext: card.nextSibling,
-                                    splitRow: splitRow
-                                });
-                                insertAfter = splitRow;
+                            // Kartu pertama tanpa garis atas; ke-2 dst diberi pemisah.
+                            filled.forEach(function (card, idx) {
+                                if (idx > 0) card.classList.add('print-split');
+                                else card.classList.remove('print-split');
                             });
                         });
                     }
 
-                    // Kembalikan struktur DOM ke kondisi SEBELUM cetak: kartu
-                    // dikembalikan ke td aslinya di urutan semula, baris lanjutan
-                    // dihapus, lalu catatan mutasi dikosongkan.
+                    // Kembalikan struktur DOM ke kondisi SEBELUM cetak: hapus
+                    // class pemisah print dari semua kartu, lalu kosongkan
+                    // catatan mutasi.
                     function restorePrintLayout() {
-                        _printMutations.forEach(function (m) {
-                            m.originalParent.insertBefore(m.card, m.originalNext);
-                            m.splitRow.remove();
+                        document.querySelectorAll('#print-area [data-realisasi-card].print-split').forEach(function (card) {
+                            card.classList.remove('print-split');
                         });
                         _printMutations = [];
                     }
@@ -998,7 +1049,7 @@
                                                 ? '{ id: ' . $childRow->id . ', text: ' . json_encode($childRow->realisasi ?? '') . ', file: ' . json_encode($childRow->bukti_dukung_url) . ', filename: ' . json_encode($childRow->bukti_dukung_nama) . ' }'
                                                 : '{ id: null, text: "", file: null, filename: "" }';
                                         @endphp
-                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }" data-realisasi-card>
+                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-300 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }}, words: 0, resize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 4, 160) + 'px' }, limitWords(el) { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords(el.value) !== el.value) { el.value = window.limitRealisasiWords(el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords(el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => this.resize(el)) } }" data-realisasi-card>
                                             {{-- Teks khusus cetak: judul subbab + isi realisasi, tampil
                                                  di print sebagai teks biasa menggantikan kontrol form.
                                                  Nama/tautan file bukti TIDAK dicetak. Judul layar
@@ -1007,6 +1058,7 @@
                                                  dipakai bila textarea kosong saat cetak. --}}
                                             <div class="print-only font-bold text-xs mb-1" data-label-print>{{ $cLabel }}</div>
                                             <div class="print-only break-words" data-realisasi-print data-print-fallback="{{ $childRow->realisasi ?? '' }}">{{ $childRow->realisasi ?? '' }}</div>
+                                            <div class="text-[10px] font-semibold text-gray-500 mb-0.5 realisasi-label-screen">Dokumen 1</div>
                                             <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5 realisasi-label-screen">
                                                 <i class="fas fa-paperclip text-blue-600"></i>
                                                 <span>{{ $cLabel }}</span>
@@ -1018,11 +1070,8 @@
                                                    value="{{ $childRow->label_realisasi ?? '' }}" placeholder="{{ $cLabel }}"
                                                    class="w-full border rounded text-xs p-2 mb-2 {{ $isRealisasiSaved ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white border-gray-300' }}"
                                                    {{ $isRealisasiSaved ? 'disabled' : '' }}>
-                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
-                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." name="realisasi[utama][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
-                                            @unless($isRealisasiSaved)
-                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
-                                            @endunless
+                                            <div>
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize($el))" @input="limitWords($event.target)" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." name="realisasi[utama][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
                                             </div>
                                             <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
                                                 @if(!$isRealisasiSaved)
@@ -1039,6 +1088,9 @@
                                                 <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                                 @endif
                                             </div>
+                                            @unless($isRealisasiSaved)
+                                            <div class="text-right text-[10px] text-gray-400 mt-1 print-hidden" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                            @endunless
                                         </div>
                                     @endforeach
                                 @else
@@ -1095,7 +1147,7 @@
                             @endphp
                             <td class="align-top" x-data="{ items: {{ $tData }} }">
                                 <template x-for="(item, index) in items" :key="item.id">
-                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md relative group" data-realisasi-card>
+                                    <div class="mb-4 bg-white p-3 rounded-lg border border-gray-300 shadow-sm transition-all hover:shadow-md relative group" x-data="{ words: 0, resize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 4, 160) + 'px' }, limitWords(el) { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords(el.value) !== el.value) { el.value = window.limitRealisasiWords(el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords(el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => this.resize(el)) } }" data-realisasi-card>
                                         {{-- Teks khusus cetak: ikut state Alpine (item.text) karena
                                              textarea masih bisa diedit sebelum disimpan.
                                              data-print-fallback = teks tersimpan server (item pertama). --}}
@@ -1108,11 +1160,8 @@
                                         @endif
                                         <div class="flex items-start gap-2 mb-3 pr-6">
                                             <span class="font-bold text-gray-700 mt-1" x-text="(index + 1) + '.'"></span>
-                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
-                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." :name="'realisasi[tambahan][' + {{ $tambahan->id }} + '][]'" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}></textarea>
-                                            @unless($isRealisasiSaved)
-                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
-                                            @endunless
+                                            <div>
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize($el))" @input="limitWords($event.target)" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-gray-200' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi..." :name="'realisasi[tambahan][' + {{ $tambahan->id }} + '][]'" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}></textarea>
                                             </div>
                                         </div>
                                         <div class="ml-6 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
@@ -1130,6 +1179,9 @@
                                             <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                             @endif
                                         </div>
+                                        @unless($isRealisasiSaved)
+                                        <div class="text-right text-[10px] text-gray-400 mt-1 print-hidden" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                        @endunless
                                     </div>
                                 </template>
                                 @if(!$isRealisasiSaved)
@@ -1259,11 +1311,12 @@
                                                 ? '{ id: ' . $childRow->id . ', text: ' . json_encode($childRow->realisasi ?? '') . ', file: ' . json_encode($childRow->bukti_dukung_url) . ', filename: ' . json_encode($childRow->bukti_dukung_nama) . ' }'
                                                 : '{ id: null, text: "", file: null, filename: "" }';
                                         @endphp
-                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }} }" data-realisasi-card>
+                                        <div class="mb-4 bg-white p-3 rounded-lg border border-gray-300 shadow-sm transition-all hover:shadow-md" x-data="{ item: {{ $cData }}, words: 0, resize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 4, 160) + 'px' }, limitWords(el) { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords(el.value) !== el.value) { el.value = window.limitRealisasiWords(el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords(el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => this.resize(el)) } }" data-realisasi-card>
                                             {{-- Teks khusus cetak: judul subbab + isi realisasi.
                                                  Nama/tautan file bukti TIDAK dicetak sesuai permintaan. --}}
                                             <div class="print-only font-bold text-xs mb-1" data-label-print>{{ $cLabel }}</div>
                                             <div class="print-only break-words" data-realisasi-print data-print-fallback="{{ $childRow->realisasi ?? '' }}">{{ $childRow->realisasi ?? '' }}</div>
+                                            <div class="text-[10px] font-semibold text-gray-500 mb-0.5 realisasi-label-screen">Dokumen 1</div>
                                             <div class="font-bold text-xs text-gray-800 mb-2 flex items-center gap-1.5 realisasi-label-screen">
                                                 <i class="fas fa-paperclip text-blue-600"></i>
                                                 <span>{{ $cLabel }}</span>
@@ -1275,11 +1328,8 @@
                                                    value="{{ $childRow->label_realisasi ?? '' }}" placeholder="{{ $cLabel }}"
                                                    class="w-full border rounded text-xs p-2 mb-2 {{ $isRealisasiSaved ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white border-gray-300' }}"
                                                    {{ $isRealisasiSaved ? 'disabled' : '' }}>
-                                            <div x-data="{ words: 0, resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight + 4, 160) + 'px' }, limitWords() { if (typeof window.limitRealisasiWords === 'function' && window.limitRealisasiWords($el.value) !== $el.value) { $el.value = window.limitRealisasiWords($el.value); } this.words = (window.limitRealisasiWords ? window.limitRealisasiWords($el.value).split(/\s+/).filter(Boolean).length : 0); $nextTick(() => resize()) } }">
-                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize())" @input="limitWords()" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-blue-500 focus:ring-blue-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi perilaku kerja..." name="realisasi[perilaku][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
-                                            @unless($isRealisasiSaved)
-                                            <div class="text-right text-[10px] text-gray-400 mt-0.5" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
-                                            @endunless
+                                            <div>
+                                            <textarea x-model="item.text" x-init="words = $el.value.trim() ? $el.value.trim().split(/\s+/).length : 0; $nextTick(() => resize($el))" @input="limitWords($event.target)" class="w-full rounded-md shadow-sm text-xs p-2.5 max-h-40 overflow-y-auto resize-y {{ $isRealisasiSaved ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed focus:ring-0 focus:border-blue-500 focus:ring-blue-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500' }}" style="min-height: 120px;" rows="5" placeholder="Tuliskan realisasi perilaku kerja..." name="realisasi[perilaku][{{ $child->id }}]" {{ $isRealisasiSaved ? 'readonly disabled' : '' }}>{{ $childRow->realisasi ?? '' }}</textarea>
                                             </div>
                                             <div class="mt-3 bg-blue-50 p-2.5 rounded border border-blue-100 pdf-upload-box" x-init="initPdfBukti($el)">
                                                 @if(!$isRealisasiSaved)
@@ -1296,6 +1346,9 @@
                                                 <p class="text-[10px] text-gray-500 mt-1 italic">* Wajib unggah minimal 1 bukti pendukung</p>
                                                 @endif
                                             </div>
+                                            @unless($isRealisasiSaved)
+                                            <div class="text-right text-[10px] text-gray-400 mt-1 print-hidden" x-text="words.toLocaleString('id-ID') + '/30 kata'"></div>
+                                            @endunless
                                         </div>
                                     @endforeach
                                 @else

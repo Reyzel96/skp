@@ -23,6 +23,30 @@ class PeriodeSkp extends Model
         'batas_penilaian' => 'date',
     ];
 
+    protected static function booted(): void
+    {
+        // Pembekuan distribusi riil:
+        // - periode berubah status menjadi 'selesai' → hitung + simpan (timpa bekuan lama);
+        // - periode dibuka kembali dari 'selesai' → hapus bekuan.
+        static::updated(function (PeriodeSkp $periode) {
+            // Abaikan save yang tidak benar-benar mengubah status (mis. save internal
+            // dari freeze()/unfreeze() — updated event dipanggil sebelum syncOriginal()).
+            if ($periode->getOriginal('status') === $periode->status) {
+                return;
+            }
+
+            if ($periode->status === 'selesai') {
+                \App\Support\DistribusiRiil::freeze($periode);
+            } elseif ($periode->getOriginal('status') === 'selesai') {
+                \App\Support\DistribusiRiil::unfreeze($periode);
+            }
+        });
+
+        static::deleted(function (PeriodeSkp $periode) {
+            // Tidak ada aksi khusus: kolom bekuan ikut terhapus bersama baris.
+        });
+    }
+
     public function skpDosen()
     {
         return $this->hasMany(SkpDosen::class);

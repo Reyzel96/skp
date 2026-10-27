@@ -76,6 +76,35 @@ class RealisasiRingkas
             return substr($raw, $m[0][1] + strlen($m[0][0]));
         }
 
+        // b2) Formulir kinerja SKP.pdf: lewati seluruh header formulir (judul
+        //     "SASARAN KINERJA PEGAWAI…", periode, nama, NIP, pangkat, jabatan,
+        //     unit kerja, URL, tanggal cetak, footer "Halaman X dari Y") —
+        //     ambil dari baris setelah baris identitas terakhir. Terdeteksi
+        //     dari judul formulir + label identitas.
+        if (preg_match('/(?:^|\n)\s*sasaran\s+kinerja\s+pegawai/i', $raw)) {
+            $lines = explode("\n", $raw);
+            $lastHeader = -1;
+            foreach ($lines as $i => $line) {
+                if (preg_match('/(?:nama|nip|pangkat|golongan|jabatan|unit\s+kerja|periode|tahun\s+kinerja|tanggal\s+cetak|dari\s+tanggal|sampai\s+dengan|halaman\s+\d+\s+dari\s+\d+)/i', $line)) {
+                    $lastHeader = $i;
+                }
+            }
+            // Ambil baris pertama setelah header yang berisi teks berarti
+            // (≥4 kata), fallback: setelah baris identitas terakhir.
+            for ($i = $lastHeader + 1; $i < count($lines); $i++) {
+                $p = trim($lines[$i]);
+                if ($p === '' || $this->terlihatMetadata($p)) {
+                    continue;
+                }
+                if ($this->hitungKata($p) >= 4) {
+                    return $p;
+                }
+            }
+            if ($lastHeader >= 0 && $lastHeader + 1 < count($lines)) {
+                return implode("\n", array_slice($lines, $lastHeader + 1));
+            }
+        }
+
         // c) Lewati blok metadata awal (judul/penulis/afiliasi/email/DOI):
         //    ambil dari paragraf pertama yang berupa kalimat utuh.
         foreach (preg_split('/\n+/u', $raw) as $para) {

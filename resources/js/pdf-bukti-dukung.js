@@ -92,6 +92,31 @@ function pickRelevantSegment(raw) {
         return raw.slice(mForm.index + mForm[0].length);
     }
 
+    // b2) Formulir kinerja SKP.pdf: lewati seluruh header formulir (judul
+    //     "SASARAN KINERJA PEGAWAI…", periode, nama, NIP, pangkat, jabatan,
+    //     unit kerja, URL, tanggal cetak) — ambil dari baris setelah baris
+    //     identitas terakhir. Terdeteksi dari judul formulir + label identitas.
+    if (/(?:^|\n)\s*sasaran\s+kinerja\s+pegawai/i.test(raw)) {
+        const lines = raw.split('\n');
+        let lastHeader = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (/(?:nama|nip|pangkat|golongan|jabatan|unit\s+kerja|periode|tahun\s+kinerja|tanggal\s+cetak|dari\s+tanggal|sampai\s+dengan|halaman\s+\d+\s+dari\s+\d+)/i.test(lines[i])) {
+                lastHeader = i;
+            }
+        }
+        // "Halaman X dari Y" juga footer — jangan sampai dianggap isi.
+        // Ambil dari baris pertama setelah header yang berisi teks berarti
+        // (≥4 kata), fallback: setelah baris identitas terakhir.
+        for (let i = lastHeader + 1; i < lines.length; i++) {
+            const p = lines[i].trim();
+            if (p === '' || isMetadataLine(p)) continue;
+            if (countWords(p) >= 4) return p;
+        }
+        if (lastHeader >= 0 && lastHeader + 1 < lines.length) {
+            return lines.slice(lastHeader + 1).join('\n');
+        }
+    }
+
     // c) Lewati blok metadata awal (judul/penulis/afiliasi/email/DOI): ambil
     //    dari paragraf pertama yang berupa kalimat utuh.
     for (const para of raw.split(/\n+/u)) {
@@ -176,16 +201,30 @@ export async function extractPdfText(file) {
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
-            const pageText = content.items
-                .map((it) => (typeof it.str === 'string' ? it.str : ''))
-                .join(' ');
+            // Pertahankan baris: item PDF.js biasanya per-baris/fragmen. Gunakan
+            // hasEOL bila tersedia untuk memutus baris secara akurat — struktur
+            // baris ini PENTING untuk pemilihan segmen (lewati header identitas
+            // formulir SKP.pdf, ambil bagian relevan).
+            let pageText = '';
+            for (const it of content.items) {
+                if (typeof it.str !== 'string') continue;
+                pageText += it.str;
+                if (it.hasEOL) pageText += '\n';
+            }
+            // Rapikan spasi/tab per baris; baris kosong beruntun dipadatkan.
+            pageText = pageText
+                .split('\n')
+                .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+                .filter((line, idx, arr) => line !== '' || (idx > 0 && arr[idx - 1] !== ''))
+                .join('\n');
             if (pageText.trim() !== '') {
                 chunks.push(pageText);
             }
             page.cleanup();
         }
 
-        const text = chunks.join('\n\n').replace(/[ \t]+/g, ' ').trim();
+        // Halaman dipisah baris kosong; baris dalam halaman dipertahankan.
+        const text = chunks.join('\n\n').trim();
         if (text === '') {
             throw new Error('PDF tidak memiliki teks yang bisa dibaca (kemungkinan hasil scan). Isi realisasi secara manual.');
         }

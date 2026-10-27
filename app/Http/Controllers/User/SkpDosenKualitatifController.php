@@ -31,6 +31,26 @@ class SkpDosenKualitatifController extends Controller
             'skpHeader.pejabatPenilai.roles'
         ])->where('skp_header_id', $id)->firstOrFail();
 
+        // Keamanan: hanya pemilik SKP, penilai/atasan yang tercatat di header,
+        // atau pimpinan (Dekan/Rektorat/Rektor/Wadek/Kaprodi/Super Admin)
+        // yang boleh melihat. Pola sama dengan EvaluasiBawahanController.
+        // Variabel $currentUser dipakai (bukan $user) karena $user di bawah
+        // adalah pemilik SKP yang dikirim ke view.
+        $currentUser = \Illuminate\Support\Facades\Auth::user();
+        $header = $skpKualitatif->skpHeader;
+        $isOwner = $header->user_id == $currentUser->id;
+        $isAssignedEvaluator = in_array($currentUser->id, array_filter([
+            $header->penilai_utama_id,
+            $header->penilai_akhir_id,
+            $header->pejabat_penilai_id,
+            $header->atasan_pejabat_penilai_id,
+        ]));
+        $isBypassRole = $currentUser->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2', 'Super Admin'])
+            || $currentUser->roles->contains(fn ($r) => str_contains($r->name, 'Kaprodi'));
+        if (!$isOwner && !$isAssignedEvaluator && !$isBypassRole) {
+            abort(403, 'Anda tidak memiliki akses ke SKP ini.');
+        }
+
         $tambahans = \App\Models\SkpKualitatifTugasTambahan::where('skp_header_id', $id)->get();
         $perilakus = \App\Models\SkpKualitatifPerilaku::where('skp_header_id', $id)->get();
         $lampirans = \App\Models\SkpKualitatifLampiran::where('skp_header_id', $id)->get();
@@ -61,6 +81,154 @@ class SkpDosenKualitatifController extends Controller
         $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $id)->where('jenis', 'utama')->with('acuanParent.children')->get();
 
         return view('user.skp-dosen-kualitatif.show', compact('skpKualitatif', 'skpUtamas', 'tambahans', 'perilakus', 'lampirans', 'distribusiNilai', 'hasilKerja', 'user', 'penilai', 'realisasis', 'perilakuAcuan', 'isRealisasiSaved'));
+    }
+
+    public function print($id)
+    {
+        // Data identik dengan show(): satu sumber data, beda hanya tampilan.
+        $skpKualitatif = \App\Models\SkpKualitatif::with([
+            'skpHeader.user.profile',
+            'skpHeader.user.roles',
+            'skpHeader.periode',
+            'skpHeader.pejabatPenilai.profile',
+            'skpHeader.pejabatPenilai.roles'
+        ])->where('skp_header_id', $id)->firstOrFail();
+
+        // Keamanan: guard sama dengan show() — pemilik, penilai/atasan tercatat,
+        // atau pimpinan (Dekan/Rektorat/Rektor/Wadek/Kaprodi/Super Admin).
+        $currentUser = \Illuminate\Support\Facades\Auth::user();
+        $header = $skpKualitatif->skpHeader;
+        $isOwner = $header->user_id == $currentUser->id;
+        $isAssignedEvaluator = in_array($currentUser->id, array_filter([
+            $header->penilai_utama_id,
+            $header->penilai_akhir_id,
+            $header->pejabat_penilai_id,
+            $header->atasan_pejabat_penilai_id,
+        ]));
+        $isBypassRole = $currentUser->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2', 'Super Admin'])
+            || $currentUser->roles->contains(fn ($r) => str_contains($r->name, 'Kaprodi'));
+        if (!$isOwner && !$isAssignedEvaluator && !$isBypassRole) {
+            abort(403, 'Anda tidak memiliki akses ke SKP ini.');
+        }
+
+        $tambahans = \App\Models\SkpKualitatifTugasTambahan::where('skp_header_id', $id)->get();
+        $perilakus = \App\Models\SkpKualitatifPerilaku::where('skp_header_id', $id)->get();
+        $lampirans = \App\Models\SkpKualitatifLampiran::where('skp_header_id', $id)->get();
+
+        $perilakuAcuan = \App\Models\SkpKualitatifAcuanParent::where('kategori', 'perilaku')->with('children')->get();
+        $realisasis = \App\Models\SkpKualitatifRealisasi::where('skp_header_id', $id)->get();
+        $isRealisasiSaved = $realisasis->count() > 0;
+
+        $user = $skpKualitatif->skpHeader->user;
+        $penilai = $skpKualitatif->skpHeader->pejabatPenilai;
+        $atasan = $skpKualitatif->skpHeader->atasanPejabatPenilai;
+
+        $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $id)->where('jenis', 'utama')->with('acuanParent.children')->get();
+
+        // Rating/predikat dihitung di PHP (pengganti perhitungan Alpine di show).
+        // Pemetaan label -> angka dari rumus superadmin (Cache), fallback Diatas=3,
+        // Sesuai=2, Dibawah=1 — sama dengan layar.
+        $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+        $hasilKerjaMap = $hasilKerja;
+
+        // Distribusi nilai untuk POLA DISTRIBUSI (chart) di tab evaluasi.
+        $defaultDistribusiNilai = [
+            'Istimewa' => [0, 1, 20, 158, 542],
+            'Baik' => [83, 125, 250, 458, 83],
+            'Butuh Perbaikan' => [125, 167, 417, 167, 125],
+            'Kurang/Misconduct' => [83, 458, 250, 125, 83],
+            'Sangat Kurang' => [542, 292, 125, 42, 0]
+        ];
+        $distribusiNilai = \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai);
+
+        // POLA DISTRIBUSI riil: dibekukan saat periode dokumen ditutup.
+        // state 1 = periode belum ditutup; state 2 = ditutup, data < ambang; state 3 = tampilkan chart beku.
+        $minDistribusi = (int) config('skp.distribusi_min_pegawai', 5);
+        $distribusiRiil = ['state' => 1, 'data' => [0, 0, 0, 0, 0], 'total' => 0, 'min' => $minDistribusi];
+        if ($periodeDokumen = $skpKualitatif->skpHeader->periode) {
+            if ($beku = \App\Support\DistribusiRiil::beku($periodeDokumen)) {
+                $labels = \App\Support\DistribusiRiil::labels();
+                $dataArray = [];
+                foreach ($labels as $lbl) {
+                    $dataArray[] = (int) ($beku['data'][$lbl] ?? 0);
+                }
+                $distribusiRiil = [
+                    'state' => ($beku['total'] ?? 0) >= $minDistribusi ? 3 : 2,
+                    'data' => $dataArray,
+                    'total' => (int) ($beku['total'] ?? 0),
+                    'min' => $minDistribusi,
+                ];
+            }
+        }
+
+        $avgUtama = $this->hitungRataRata($skpUtamas, $hasilKerjaMap);
+        $avgPerilaku = $this->hitungRataRataPerilaku($perilakus, $hasilKerjaMap);
+
+        $rating = $this->kategoriRating($avgUtama);
+        $ratingPerilaku = $this->kategoriRating($avgPerilaku);
+        $predikatKinerja = $this->predikatKinerja($rating, $ratingPerilaku);
+
+        return view('user.skp-dosen-kualitatif.print', compact(
+            'skpKualitatif', 'skpUtamas', 'tambahans', 'perilakus', 'lampirans',
+            'user', 'penilai', 'atasan', 'realisasis', 'perilakuAcuan',
+            'isRealisasiSaved', 'rating', 'ratingPerilaku', 'predikatKinerja',
+            'distribusiNilai', 'hasilKerja', 'distribusiRiil'
+        ));
+    }
+
+    /**
+     * Rata-rata skor hasil kerja untuk kumpulan target (A. UTAMA).
+     * Pemetaan label -> angka: Diatas=3, Sesuai=2, Dibawah=1 (default, sama dengan layar).
+     */
+    private function hitungRataRata($skpUtamas, array $hasilKerjaMap): ?float
+    {
+        $skor = [];
+        foreach ($skpUtamas as $u) {
+            $val = $u->hasil_kerja ?? null;
+            if ($val === null || $val === '') continue;
+            $skor[] = match ($val) {
+                'Diatas Ekspektasi'  => $hasilKerjaMap[0],
+                'Sesuai Ekspektasi'  => $hasilKerjaMap[1],
+                'Dibawah Ekspektasi' => $hasilKerjaMap[2],
+                default => null,
+            };
+        }
+        $skor = array_filter($skor, fn($s) => $s !== null);
+        if (empty($skor)) return null;
+        return array_sum($skor) / count($skor);
+    }
+
+    /**
+     * Rata-rata skor untuk tabel PERILAKU KERJA.
+     */
+    private function hitungRataRataPerilaku($perilakus, array $hasilKerjaMap): ?float
+    {
+        return $this->hitungRataRata($perilakus, $hasilKerjaMap);
+    }
+
+    private function kategoriRating(?float $avg): string
+    {
+        if ($avg === null) return '';
+        if ($avg >= 2.5) return 'DIATAS EKSPEKTASI';
+        if ($avg >= 1.5) return 'SESUAI EKSPEKTASI';
+        return 'DIBAWAH EKSPEKTASI';
+    }
+
+    private function predikatKinerja(string $h, string $p): string
+    {
+        if ($h === '' || $p === '') return '';
+        if ($h === 'DIATAS EKSPEKTASI') {
+            if ($p === 'DIATAS EKSPEKTASI') return 'SANGAT BAIK';
+            if ($p === 'SESUAI EKSPEKTASI') return 'BAIK';
+            return 'KURANG';
+        }
+        if ($h === 'SESUAI EKSPEKTASI') {
+            if ($p === 'DIBAWAH EKSPEKTASI') return 'BUTUH PERBAIKAN';
+            return 'BAIK';
+        }
+        if ($p === 'DIATAS EKSPEKTASI') return 'BUTUH PERBAIKAN';
+        if ($p === 'SESUAI EKSPEKTASI') return 'KURANG';
+        return 'SANGAT KURANG';
     }
 
     public function storeRealisasi(Request $request, $id)

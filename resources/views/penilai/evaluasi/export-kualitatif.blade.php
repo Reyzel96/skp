@@ -156,6 +156,10 @@
     .card-label { font-weight: bold; font-size: 11px; margin: 0 0 2px 0; }
     .card-isi { margin: 0 0 6px 0; }
     .kartu { margin-bottom: 6px; }
+    /* R4 — pemisah antar dokumen: kartu ke-2 dst diberi garis atas tipis +
+       jarak; dokumen pertama tanpa garis atas. Semua kartu tetap di dalam
+       SATU td tersusun ke bawah (tidak ada baris tabel tambahan). */
+    .kartu + .kartu { border-top: 1px solid #666; padding-top: 6px; margin-top: 6px; }
     .redaksi { margin: 0; }
     .flex-no { width: 100%; }
 </style>

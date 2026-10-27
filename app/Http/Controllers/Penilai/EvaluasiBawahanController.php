@@ -362,8 +362,6 @@ class EvaluasiBawahanController extends Controller
             abort(403);
         }
 
-        if ($resp = $this->pastikanPenilaianBuka($header->periode_skp_id)) return $resp;
-
         $request->validate([
             'status' => 'required|string|in:Selesai,Ditolak,Draft',
             'catatan_penilai' => 'nullable|string',
@@ -371,9 +369,24 @@ class EvaluasiBawahanController extends Controller
             'umpan_balik' => 'nullable|array'
         ]);
 
+        // Draf (Simpan Sementara) bebas tenggat: tanpa cek periode.
+        // Validasi status di atas sudah whitelist, jadi hanya 'Draft' yang
+        // dianggap draf — nilai lain (Selesai/Ditolak) = aksi final wajib cek tenggat.
+        $isDraftSave = $request->input('status') == 'Draft';
+
+        if (!$isDraftSave) {
+            if ($resp = $this->pastikanPenilaianBuka($header->periode_skp_id)) return $resp;
+        }
+
+        // Draf tidak boleh menimpa SKP yang sudah difinalisasi.
+        // (Cek SEBELUM transaksi dibuka supaya tidak ada return
+        //  dari dalam try yang transaksinya sudah terbuka.)
+        if ($isDraftSave && $header->status === 'Selesai') {
+            return back()->with('error', 'SKP ini sudah difinalisasi (Selesai) dan tidak bisa diubah lagi, termasuk simpan sementara.');
+        }
+
         DB::beginTransaction();
         try {
-            $isDraftSave = $request->input('status') == 'Draft';
             $pesan = 'Perubahan evaluasi (Kualitatif) berhasil disimpan sementara.';
 
             if (!$isDraftSave) {

@@ -85,6 +85,7 @@ Route::middleware(['auth'])->prefix('pegawai')->name('pegawai.')->group(function
         Route::post('/skp-dosen/update-target-detail', 'updateTargetDetail')->name('skp-dosen.update-target-detail');
 
         Route::get('/skp-dosen-kualitatif', [App\Http\Controllers\User\SkpDosenKualitatifController::class, 'index'])->name('skp-dosen-kualitatif.index');
+        Route::get('/skp-dosen-kualitatif/{id}/print', [App\Http\Controllers\User\SkpDosenKualitatifController::class, 'print'])->name('skp-dosen-kualitatif.print');
         Route::get('/skp-dosen-kualitatif/{id}', [App\Http\Controllers\User\SkpDosenKualitatifController::class, 'show'])->name('skp-dosen-kualitatif.show');
         Route::post('/skp-dosen-kualitatif/{id}/store-realisasi', [App\Http\Controllers\User\SkpDosenKualitatifController::class, 'storeRealisasi'])->name('skp-dosen-kualitatif.store-realisasi');
 
