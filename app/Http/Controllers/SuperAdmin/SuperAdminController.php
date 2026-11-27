@@ -354,7 +354,7 @@ class SuperAdminController extends Controller
 
     public function usersCreate()
     {
-        $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
+        $jabatanUtamaRoles = Role::where('kategori', 'utama')->withCount('users')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
         $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
@@ -366,7 +366,7 @@ class SuperAdminController extends Controller
     {
         $user->load(['profile', 'profile.pangkatGolongan.jenjangJabatan']);
 
-        $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
+        $jabatanUtamaRoles = Role::where('kategori', 'utama')->withCount('users')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
         $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
@@ -379,9 +379,14 @@ class SuperAdminController extends Controller
         $request->validate([
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:8|confirmed',
-            'role_utama' => 'nullable|exists:roles,name',
+            'role_utama' => [
+                'nullable',
+                Rule::exists('roles', 'name')->where('kategori', 'utama')->whereNot('name', 'Super Admin'),
+            ],
             'roles_tendik' => 'required_without:role_utama|array',
-            'roles_tendik.*' => 'exists:roles,name',
+            'roles_tendik.*' => [
+                Rule::exists('roles', 'name')->where('kategori', 'tendik'),
+            ],
             'nama' => 'required|string|max:255',
             'nip' => 'required|string|max:20|unique:user_profiles,nip',
             'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
@@ -389,7 +394,9 @@ class SuperAdminController extends Controller
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
-            'roles_tendik.required_without' => 'Anda harus memilih minimal satu Jabatan Utama atau Peran Tendik.'
+            'roles_tendik.required_without' => 'Anda harus memilih minimal satu Jabatan Utama atau Peran Tendik.',
+            'role_utama.exists' => 'Jabatan utama tidak valid atau bukan jabatan utama (kategori utama).',
+            'roles_tendik.*.exists' => 'Peran tambahan :input tidak valid atau bukan peran tendik (kategori tendik).',
         ]);
 
         if ($request->filled('role_utama') && !str_contains($request->role_utama, 'Dosen')) {
@@ -450,9 +457,14 @@ class SuperAdminController extends Controller
         $request->validate([
             'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|min:8|confirmed',
-            'role_utama' => 'nullable|exists:roles,name',
+            'role_utama' => [
+                'nullable',
+                Rule::exists('roles', 'name')->where('kategori', 'utama')->whereNot('name', 'Super Admin'),
+            ],
             'roles_tendik' => 'required_without:role_utama|array',
-            'roles_tendik.*' => 'exists:roles,name',
+            'roles_tendik.*' => [
+                Rule::exists('roles', 'name')->where('kategori', 'tendik'),
+            ],
             'nama' => 'required|string|max:255',
             'nip' => ['required', 'string', 'max:20', Rule::unique('user_profiles')->ignore($user->profile->id ?? null)],
             'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
@@ -460,7 +472,9 @@ class SuperAdminController extends Controller
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
-            'roles_tendik.required_without' => 'Anda harus memilih minimal satu Jabatan Utama atau Peran Tendik.'
+            'roles_tendik.required_without' => 'Anda harus memilih minimal satu Jabatan Utama atau Peran Tendik.',
+            'role_utama.exists' => 'Jabatan utama tidak valid atau bukan jabatan utama (kategori utama).',
+            'roles_tendik.*.exists' => 'Peran tambahan :input tidak valid atau bukan peran tendik (kategori tendik).',
         ]);
 
         if ($request->filled('role_utama') && !str_contains($request->role_utama, 'Dosen')) {
