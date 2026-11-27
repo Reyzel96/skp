@@ -63,20 +63,10 @@
             $adaError = $errors->any();
         @endphp
 
-        <div class="w-full max-w-[1280px] mx-auto">
-            {{-- Header 1 baris: judul kiri, Batal + Simpan kanan (sentence case) --}}
+        <div class="w-full">
+            {{-- Header 1 baris: judul kiri (tombol Batal/Simpan hanya di bawah form) --}}
             <div class="flex flex-wrap items-center gap-3 mb-2">
                 <h1 class="text-xl font-bold text-gray-900">Tambah pegawai</h1>
-                <div class="flex items-center gap-2 ml-auto">
-                    <a href="{{ route('superadmin.users.index') }}"
-                        class="bg-white text-gray-700 h-10 px-4 rounded-lg font-semibold hover:bg-gray-100 transition-all text-center border border-gray-300 inline-flex items-center">
-                        Batal
-                    </a>
-                    <button type="submit" form="form-user-create" data-tombol-simpan
-                        class="bg-blue-600 text-white h-10 px-5 rounded-lg font-semibold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all shadow inline-flex items-center">
-                        Simpan
-                    </button>
-                </div>
             </div>
             <p class="text-[13px] text-gray-500 mb-4">Lengkapi data akun, jabatan, dan profil pegawai. Kolom bertanda * wajib diisi.</p>
 
@@ -343,7 +333,7 @@
                     </div>
                 </div>
 
-                {{-- Tombol diulang di bawah form (desktop) --}}
+                {{-- Tombol di bawah form (desktop), rata kanan sejajar tepi kartu --}}
                 <div class="hidden md:flex gap-2 justify-end mt-4 pb-2">
                     <a href="{{ route('superadmin.users.index') }}"
                         class="bg-white text-gray-700 h-10 px-4 rounded-lg font-semibold hover:bg-gray-100 transition-all text-center border border-gray-300 inline-flex items-center">
