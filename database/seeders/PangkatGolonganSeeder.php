@@ -18,7 +18,8 @@ class PangkatGolonganSeeder extends Seeder
         ];
 
         foreach ($jenjangData as $data) {
-            JenjangJabatan::create($data);
+            // Idempotent: aman dijalankan berulang — tidak menduplikasi baris.
+            JenjangJabatan::firstOrCreate(['nama' => $data['nama']], $data);
         }
 
         $pangkatData = [
@@ -34,7 +35,13 @@ class PangkatGolonganSeeder extends Seeder
 
         foreach ($pangkatData as $data) {
             $jenjang = JenjangJabatan::where('nama', $data['jenjang'])->firstOrFail();
-            PangkatGolongan::create([
+            // Idempotent: kunci unik per jenjang + kode_pangkat.
+            // Atribut EKSPLISIT — array $data memuat kunci 'jenjang' (bukan kolom),
+            // tidak boleh diteruskan mentah ke firstOrCreate.
+            PangkatGolongan::firstOrCreate([
+                'jenjang_jabatan_id' => $jenjang->id,
+                'kode_pangkat' => $data['kode_pangkat'],
+            ], [
                 'jenjang_jabatan_id' => $jenjang->id,
                 'kode_pangkat' => $data['kode_pangkat'],
                 'nama_pangkat' => $data['nama_pangkat'],

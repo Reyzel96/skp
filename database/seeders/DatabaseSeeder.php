@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             RoleAndAdminSeeder::class,
             ProdiSeeder::class,
             PeriodeSkpSeeder::class,
+            PangkatGolonganSeeder::class,
         ]);
     }
 }
