@@ -581,7 +581,17 @@ class SuperAdminController extends Controller
         ]);
 
         try {
-            Excel::import(new UsersImport, $request->file('file'));
+            // Tugas 26: import object ditampung agar pesan peringatan per baris
+            // (role tidak valid, baris dilewati) bisa dibaca lalu diflash ke session.
+            $import = new UsersImport();
+            Excel::import($import, $request->file('file'));
+
+            if (!empty($import->warnings)) {
+                return redirect()->route('superadmin.users.index')
+                    ->with('success', 'Data user berhasil diimport!')
+                    ->with('import_warnings', $import->warnings);
+            }
+
             return redirect()->route('superadmin.users.index')->with('success', 'Data user berhasil diimport!');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal mengimport data: ' . $e->getMessage()]);

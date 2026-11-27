@@ -38,6 +38,18 @@
                     </ul>
                 </div>
             @endif
+
+            {{-- Tugas 26: peringatan per baris dari import (role tidak valid / baris dilewati) --}}
+            @if(session('import_warnings'))
+                <div class="bg-amber-100 border border-amber-400 text-amber-800 px-4 py-2 rounded relative mt-2" role="alert">
+                    <p class="font-bold mb-1"><i class="fas fa-exclamation-triangle mr-1"></i>Beberapa baris dilewati saat import:</p>
+                    <ul class="list-disc list-inside text-sm">
+                        @foreach(session('import_warnings') as $peringatan)
+                            <li>{{ $peringatan }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
         </div>
 
         <!-- MODAL IMPORT -->

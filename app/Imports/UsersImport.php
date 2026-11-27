@@ -10,9 +10,17 @@ use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Row;
 use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Log;
 
 class UsersImport implements OnEachRow, WithHeadingRow
 {
+    /**
+     * Tugas 26: pesan peringatan per baris yang dapat ditampilkan ke user
+     * (bukan hanya Log). Controller usersImport membaca ini lalu flash ke session.
+     * @var string[]
+     */
+    public array $warnings = [];
+
     public function onRow(Row $row)
     {
         $data = $row->toArray();
@@ -53,16 +61,63 @@ class UsersImport implements OnEachRow, WithHeadingRow
             return null; // Skip jika kolom role kosong
         }
 
-        $roleNames = array_map('trim', explode(',', $rolesString));
-        $existingRoles = Role::whereIn('name', $roleNames)->pluck('name')->toArray();
+        // 2b. FILTER ROLE SEPERTI usersStore (Tugas 26 — tutup celah Super Admin via Excel).
+        // Kolom dipisah sesuai semantiknya:
+        // - 'jabatan_utama'              : harus role kategori 'utama' DAN bukan 'Super Admin'.
+        // - 'peran_tambahan_tendik_...' / 'roles' (format lama): harus kategori 'tendik'.
+        // Role tidak valid TIDAK di-assign; kegagalan dicatat via Log DAN dikumpulkan
+        // di $warnings agar bisa ditampilkan ke user per baris (nomor baris Excel + nama role).
+        // Tugas 26: getIndex() SUDAH merupakan nomor baris sheet (heading = baris 1,
+        // data pertama = baris 2) — terbukti via test HTTP: baris data pertama CSV
+        // menghasilkan getIndex()=2. Tanpa +1 agar nomor yang ditampilkan ke user
+        // sama dengan nomor baris di file Excel.
+        $excelRow = $row->getIndex();
 
-        if (count($existingRoles) === 0) {
-            // Jika tidak ada satupun role yang cocok dengan database, skip baris ini
+        $filterKategori = function (array $names, string $kategori, string $labelKolom) use ($excelRow): array {
+            $db = Role::whereIn('name', $names)->get()->keyBy('name');
+            $valid = [];
+            foreach ($names as $name) {
+                $role = $db->get($name);
+                $lolos = $role
+                    && $role->kategori === $kategori
+                    && !($kategori === 'utama' && $name === 'Super Admin');
+                if ($lolos) {
+                    $valid[] = $name;
+                } else {
+                    $pesan = "Baris {$excelRow}: role '{$name}' (kolom {$labelKolom}) tidak valid dan tidak diberikan — harus kategori '{$kategori}'" . ($kategori === 'utama' ? " selain Super Admin" : "") . ".";
+                    Log::warning("Import user: baris {$excelRow} — kolom '{$labelKolom}': role '{$name}' tidak valid dan tidak di-assign (harus kategori '{$kategori}'" . ($kategori === 'utama' ? " selain Super Admin" : "") . ").");
+                    $this->warnings[] = $pesan;
+                }
+            }
+            return $valid;
+        };
+
+        $validRoles = [];
+        if (!empty($data['jabatan_utama'])) {
+            $validRoles = array_merge($validRoles, $filterKategori([trim($data['jabatan_utama'])], 'utama', 'jabatan_utama'));
+        }
+        $kolomTendik = [];
+        if (!empty($data['peran_tambahan_tendik_opsional'])) {
+            $kolomTendik[] = trim($data['peran_tambahan_tendik_opsional']);
+        }
+        // Jika pakai format lama 'roles' (peran tambahan)
+        if (!empty($data['roles'])) {
+            $kolomTendik[] = trim($data['roles']);
+        }
+        if ($kolomTendik) {
+            $validRoles = array_merge($validRoles, $filterKategori($kolomTendik, 'tendik', 'peran_tambahan_tendik'));
+        }
+
+        if (count($validRoles) === 0) {
+            // Jika tidak ada satupun role yang valid, skip baris ini
+            $pesan = "Baris {$excelRow} dilewati: tidak ada role valid ({$rolesString}).";
+            Log::warning("Import user: baris {$excelRow} dilewati — tidak ada role valid ({$rolesString}).");
+            $this->warnings[] = $pesan;
             return null;
         }
 
         // 3. PROSES SIMPAN (Hanya jika lolos validasi di atas)
-        DB::transaction(function () use ($email, $nip, $namaLengkap, $namaLogin, $password, $existingRoles, $jabatanPekerjaan, $pangkatGolongan, $jabatanFungsional, $unitKerja, $data) {
+        DB::transaction(function () use ($email, $nip, $namaLengkap, $namaLogin, $password, $validRoles, $jabatanPekerjaan, $pangkatGolongan, $jabatanFungsional, $unitKerja, $data) {
             // A. Create or Update User
             $user = User::updateOrCreate(
                 ['email' => $email],
@@ -74,7 +129,7 @@ class UsersImport implements OnEachRow, WithHeadingRow
 
             // B. Tentukan Jabatan Pekerjaan jika kosong (ambil dari role pertama yang valid)
             if (empty($jabatanPekerjaan)) {
-                $jabatanPekerjaan = $existingRoles[0];
+                $jabatanPekerjaan = $validRoles[0];
             }
 
             // C. Create or Update Profile
@@ -90,8 +145,8 @@ class UsersImport implements OnEachRow, WithHeadingRow
                 ]
             );
 
-            // D. Sync Roles yang valid saja
-            $user->syncRoles($existingRoles);
+            // D. Sync Roles yang valid saja (kategori sesuai aturan usersStore)
+            $user->syncRoles($validRoles);
         });
     }
 }
