@@ -256,7 +256,8 @@ class UserSkpController extends Controller
         $user = Auth::user();
         if ($activity->user_id !== $user->id) abort(403);
 
-        $header = SkpHeader::where('user_id', $user->id)->latest()->first();
+        // Header milik aktivitas ini (bukan header "terbaru" milik user)
+        $header = SkpHeader::find($activity->skp_header_id);
         
         // Hanya boleh hapus jika belum disetujui pimpinan
         if ($header && $header->is_target_approved_penilai && $header->is_target_approved_atasan) {

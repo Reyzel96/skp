@@ -72,8 +72,12 @@ class SkpDosenKualitatifController extends Controller
             'Sangat Kurang' => [542, 292, 125, 42, 0]
         ];
 
-        $distribusiNilai = \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai);
-        $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+        $distribusiNilai = \Illuminate\Support\Facades\Cache::get(
+            \App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $skpKualitatif->skpHeader->periode_skp_id)
+        ) ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai);
+        $hasilKerja = \Illuminate\Support\Facades\Cache::get(
+            \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $skpKualitatif->skpHeader->periode_skp_id)
+        ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
 
         $user = $skpKualitatif->skpHeader->user;
         $penilai = $skpKualitatif->skpHeader->pejabatPenilai;
@@ -128,7 +132,9 @@ class SkpDosenKualitatifController extends Controller
         // Rating/predikat dihitung di PHP (pengganti perhitungan Alpine di show).
         // Pemetaan label -> angka dari rumus superadmin (Cache), fallback Diatas=3,
         // Sesuai=2, Dibawah=1 — sama dengan layar.
-        $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+        $hasilKerja = \Illuminate\Support\Facades\Cache::get(
+            \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $header->periode_skp_id)
+        ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
         $hasilKerjaMap = $hasilKerja;
 
         // Distribusi nilai untuk POLA DISTRIBUSI (chart) di tab evaluasi.
@@ -139,7 +145,9 @@ class SkpDosenKualitatifController extends Controller
             'Kurang/Misconduct' => [83, 458, 250, 125, 83],
             'Sangat Kurang' => [542, 292, 125, 42, 0]
         ];
-        $distribusiNilai = \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai);
+        $distribusiNilai = \Illuminate\Support\Facades\Cache::get(
+            \App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $header->periode_skp_id)
+        ) ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai);
 
         // POLA DISTRIBUSI riil: dibekukan saat periode dokumen ditutup.
         // state 1 = periode belum ditutup; state 2 = ditutup, data < ambang; state 3 = tampilkan chart beku.

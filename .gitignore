@@ -16,3 +16,11 @@ public/uploads/
 .phpunit.result.cache
 
 arsip_script_lepas.zip
+
+.env
+.envs
+SKP/
+backup_*.sql
+*.bak
+public/resources.zip
+_check_pending_migrations.php

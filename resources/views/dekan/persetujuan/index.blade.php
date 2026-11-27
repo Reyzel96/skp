@@ -58,11 +58,8 @@
                                     </td>
                                     <td class="px-6 py-4">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 mb-1">
-                                            {{ $item->periode->tahun ?? '-' }}
+                                            {{ $item->periode->nama_periode ?? '-' }}
                                         </span>
-                                        <p class="text-[10px] text-gray-500 uppercase tracking-tight font-semibold">
-                                            {{ $item->periode->semester_genap ?? '-' }} / {{ $item->periode->semester_gasal ?? '-' }}
-                                        </p>
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         @if($item->status == 'Target Diajukan')
@@ -129,8 +126,7 @@
                                         <p class="text-[10px] text-gray-400 uppercase">{{ $item->user->profile->jabatan_pekerjaan ?? '-' }}</p>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <p class="text-xs font-bold text-gray-700">{{ $item->periode->tahun ?? '-' }}</p>
-                                        <p class="text-[9px] text-gray-500 uppercase">{{ $item->periode->semester_genap ?? '-' }} / {{ $item->periode->semester_gasal ?? '-' }}</p>
+                                        <p class="text-xs font-bold text-gray-700">{{ $item->periode->nama_periode ?? '-' }}</p>
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         @if($item->approver)

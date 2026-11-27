@@ -94,7 +94,7 @@
                     <select name="periode_id" class="border-gray-300 rounded-lg text-sm focus:ring-blue-500" onchange="this.form.submit()">
                         <option value="">-- Pilih Periode --</option>
                         @foreach($periode as $p)
-                            <option value="{{ $p->id }}" {{ $periodeId == $p->id ? 'selected' : '' }}>{{ $p->tahun }} - {{ $p->semester_genap }}</option>
+                            <option value="{{ $p->id }}" {{ $periodeId == $p->id ? 'selected' : '' }}>{{ $p->nama_periode }}</option>
                         @endforeach
                     </select>
                 </form>

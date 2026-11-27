@@ -595,9 +595,15 @@ class SkpDosenKualitatifController extends Controller
         return response()->json(['success' => false, 'message' => 'Endpoint tidak lagi digunakan'], 410);
     }
 
-    public function rumusHasil()
+    public function rumusHasil(Request $request)
     {
-        $periodeAktif = \App\Models\PeriodeSkp::where('status', 'aktif')->first();
+        $periodeAktif = $request->filled('periode_id')
+            ? \App\Models\PeriodeSkp::findOrFail($request->periode_id)
+            : \App\Models\PeriodeSkp::where('status', 'aktif')
+                ->orderBy('mulai', 'desc')->orderBy('id', 'desc')
+                ->first();
+
+        $periodeList = \App\Models\PeriodeSkp::orderBy('mulai', 'desc')->orderBy('id', 'desc')->get();
 
         $jumlahPegawai = 0;
         $dataReal = [
@@ -645,14 +651,29 @@ class SkpDosenKualitatifController extends Controller
             'Sangat Kurang' => [54, 29, 13, 4, 0]
         ];
 
-        $distribusiNilai = \Illuminate\Support\Facades\Cache::rememberForever('distribusi_nilai_skp', function () use ($defaultDistribusiNilai) {
-            return $defaultDistribusiNilai;
-        });
+        // Cache rumus per periode. Fallback: key lama (tanpa suffix periode)
+        // untuk data yang tersimpan sebelum key di-scope per periode.
+        $periodeId = $periodeAktif?->id;
+        $keyNilai = $periodeId ? \App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $periodeId) : null;
+        $keyPersen = $periodeId ? \App\Models\PeriodeSkp::cacheRumusKey('distribusi_persen_skp', $periodeId) : null;
+        $keyHasilKerja = $periodeId ? \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $periodeId) : null;
 
-        $distribusiPersen = \Illuminate\Support\Facades\Cache::get('distribusi_persen_skp', $defaultDistribusiPersen);
-        $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]); // Diatas (0), Sesuai (1), Dibawah (2)
+        $distribusiNilai = $periodeId
+            ? \Illuminate\Support\Facades\Cache::get($keyNilai)
+                ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai)
+            : $defaultDistribusiNilai;
+        \Illuminate\Support\Facades\Cache::rememberForever($keyNilai, fn () => $distribusiNilai);
 
-        return view('super-admin.skp-dosen-kualitatif.rumus', compact('jumlahPegawai', 'dataReal', 'distribusiNilai', 'distribusiPersen', 'hasilKerja'));
+        $distribusiPersen = $periodeId
+            ? \Illuminate\Support\Facades\Cache::get($keyPersen)
+                ?? \Illuminate\Support\Facades\Cache::get('distribusi_persen_skp', $defaultDistribusiPersen)
+            : $defaultDistribusiPersen;
+        $hasilKerja = $periodeId
+            ? \Illuminate\Support\Facades\Cache::get($keyHasilKerja)
+                ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1])
+            : [3, 2, 1]; // Diatas (0), Sesuai (1), Dibawah (2)
+
+        return view('super-admin.skp-dosen-kualitatif.rumus', compact('periodeAktif', 'periodeList', 'jumlahPegawai', 'dataReal', 'distribusiNilai', 'distribusiPersen', 'hasilKerja'));
     }
 
     public function updateRumusPegawai(Request $request)
@@ -662,7 +683,11 @@ class SkpDosenKualitatifController extends Controller
             'hasil_kerja' => 'required|array'
         ]);
 
-        $periodeAktif = \App\Models\PeriodeSkp::where('status', 'aktif')->first();
+        $periodeAktif = $request->filled('periode_id')
+            ? \App\Models\PeriodeSkp::findOrFail($request->periode_id)
+            : \App\Models\PeriodeSkp::where('status', 'aktif')
+                ->orderBy('mulai', 'desc')->orderBy('id', 'desc')
+                ->first();
         $jumlah = $periodeAktif
             ? \App\Models\SkpHeader::where('periode_skp_id', $periodeAktif->id)->distinct('user_id')->count('user_id')
             : 0;
@@ -717,9 +742,13 @@ class SkpDosenKualitatifController extends Controller
             }
         }
 
-        \Illuminate\Support\Facades\Cache::forever('distribusi_nilai_skp', $nilai);
-        \Illuminate\Support\Facades\Cache::forever('distribusi_persen_skp', $persen);
-        \Illuminate\Support\Facades\Cache::forever('hasil_kerja_skp', $hasilKerja);
+        // Penulisan HANYA ke key per periode (key lama tidak ditulis lagi).
+        if ($periodeAktif) {
+            $pid = $periodeAktif->id;
+            \Illuminate\Support\Facades\Cache::forever(\App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $pid), $nilai);
+            \Illuminate\Support\Facades\Cache::forever(\App\Models\PeriodeSkp::cacheRumusKey('distribusi_persen_skp', $pid), $persen);
+            \Illuminate\Support\Facades\Cache::forever(\App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $pid), $hasilKerja);
+        }
 
         return response()->json(['success' => true, 'message' => 'Data berhasil diperbarui']);
     }

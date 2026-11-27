@@ -47,7 +47,7 @@
                                     <p class="text-xs text-gray-500 font-semibold">{{ $header->user->getRoleNames()->first() }}</p>
                                 </td>
                                 <td class="px-6 py-4 font-semibold text-gray-700">
-                                    {{ $header->periode->tahun }} - {{ $header->periode->semester_genap }} / {{ $header->periode->semester_gasal }}
+                                    {{ $header->periode->nama_periode ?? '-' }}
                                 </td>
                                 <td class="px-6 py-4 text-center">
                                     @if($header->status == 'Review Akhir')
@@ -103,7 +103,7 @@
                                     <p class="text-xs text-gray-500 font-semibold">{{ $header->user->getRoleNames()->first() }}</p>
                                 </td>
                                 <td class="px-6 py-4 font-semibold text-gray-700">
-                                    {{ $header->periode->tahun }} - {{ $header->periode->semester_genap }} / {{ $header->periode->semester_gasal }}
+                                    {{ $header->periode->nama_periode ?? '-' }}
                                 </td>
                                 <td class="px-6 py-4 text-center">
                                     @if($header->status == 'Selesai')

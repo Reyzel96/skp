@@ -148,6 +148,37 @@
             padding-top: 6px;
         }
         .realisasi-label { font-weight: bold; font-size: 11px; margin-bottom: 2px; }
+
+        /* ===== TAMPILAN LAYAR SAJA (tidak mempengaruhi hasil cetak) =====
+           Halaman ini memakai satu CSS untuk layar + print. Blok di bawah
+           hanya aktif saat dibuka di browser, sehingga tampilan layar lebih
+           lega; saat dialog print (media print), blok ini otomatis nonaktif
+           dan hasil cetak tetap persis seperti sebelumnya. */
+        @media screen {
+            body {
+                padding: 24px 32px;
+                max-width: 1400px;
+                margin: 0 auto;
+                box-sizing: border-box;
+                background: #f3f4f6;
+            }
+            table {
+                margin-bottom: 22px;
+                background: #fff;
+            }
+            th, td { padding: 9px 12px; line-height: 1.55; }
+            .doc-header { margin-bottom: 20px; }
+            .mb-1 { margin-bottom: 6px; }
+            .mb-2 { margin-bottom: 12px; }
+            .realisasi-card + .realisasi-card {
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            /* Baris info atas (inline flex gap 12px) diberi jarak tanpa mengubah inline style */
+            body > div[style*="display:flex"] {
+                margin-bottom: 16px;
+            }
+        }
     </style>
 </head>
 <body>

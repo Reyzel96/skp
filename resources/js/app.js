@@ -8,6 +8,14 @@ import Alpine from 'alpinejs';
 // dikirim ke server/layanan eksternal.
 import { attachPdfBuktiHandler, limitRealisasiWords, REALISASI_MAX_WORDS } from './pdf-bukti-dukung';
 
+// Flatpickr (Tugas 10): date picker dd/mm/yyyy untuk form Periode SKP.
+// Diekspos global supaya inline script di view bisa memakainya.
+// CSS flatpickr diimpor di resources/css/app.css (CSS entry @vite).
+import flatpickr from 'flatpickr';
+import { Indonesian } from 'flatpickr/dist/l10n/id.js';
+window.flatpickr = flatpickr;
+window.flatpickrIndonesian = Indonesian;
+
 window.Alpine = Alpine;
 
 // Helper global untuk x-init di blade (rute initPdfBukti).

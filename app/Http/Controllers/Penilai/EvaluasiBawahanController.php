@@ -113,14 +113,18 @@ class EvaluasiBawahanController extends Controller
             $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $header->id)->where('jenis', 'utama')->with('acuanParent.children')->get();
             $perilakuAcuan = \App\Models\SkpKualitatifAcuanParent::where('kategori', 'perilaku')->with('children')->get();
 
-            $distribusiNilai = \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', [
+            $distribusiNilai = \Illuminate\Support\Facades\Cache::get(
+                \App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $periodeId)
+            ) ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', [
                 'Istimewa' => [0, 1, 20, 158, 542],
                 'Baik' => [83, 125, 250, 458, 83],
                 'Butuh Perbaikan' => [125, 167, 417, 167, 125],
                 'Kurang/Misconduct' => [83, 458, 250, 125, 83],
                 'Sangat Kurang' => [542, 292, 125, 42, 0]
             ]);
-            $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+            $hasilKerja = \Illuminate\Support\Facades\Cache::get(
+                \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $periodeId)
+            ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
 
             return view('penilai.evaluasi.show-kualitatif', compact(
                 'header', 'penilai', 'bawahan', 'skpKualitatif', 'tambahans', 
@@ -504,13 +508,13 @@ class EvaluasiBawahanController extends Controller
 
         $sumUtama = 0;
         foreach ($utamaItems as $item) {
-            $sumUtama += $this->hasilKerjaToScore($item->hasil_kerja);
+            $sumUtama += $this->hasilKerjaToScore($item->hasil_kerja, $header->periode_skp_id);
         }
         $avgUtama = $utamaItems->count() > 0 ? $sumUtama / $utamaItems->count() : 0;
 
         $sumPerilaku = 0;
         foreach ($perilakuItems as $item) {
-            $sumPerilaku += $this->hasilKerjaToScore($item->hasil_kerja);
+            $sumPerilaku += $this->hasilKerjaToScore($item->hasil_kerja, $header->periode_skp_id);
         }
         $avgPerilaku = $perilakuItems->count() > 0 ? $sumPerilaku / $perilakuItems->count() : 0;
 
@@ -533,9 +537,11 @@ class EvaluasiBawahanController extends Controller
      * Non-retroaktif: skp_headers final TIDAK dihitung ulang — nilai tersimpan
      * tetap; hanya SKP yang dinilai SETELAH bobot berubah yang terdampak.
      */
-    private function hasilKerjaToScore(?string $hasilKerja): int
+    private function hasilKerjaToScore(?string $hasilKerja, ?int $periodeId = null): int
     {
-        $bobot = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+        $bobot = \Illuminate\Support\Facades\Cache::get(
+            $periodeId ? \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $periodeId) : 'hasil_kerja_skp'
+        ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
 
         return match ($hasilKerja) {
             'Diatas Ekspektasi' => (int) ($bobot[0] ?? 3),

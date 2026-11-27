@@ -1,3 +1,8 @@
+/* Flatpickr (Tugas 10/11): CSS dimuat lewat CSS entry agar @vite menyertakannya.
+   (Impor lewat app.js menghasilkan file CSS terpisah yang TIDAK dimuat @vite.)
+   @import wajib di baris paling atas sebelum @tailwind. */
+@import 'flatpickr/dist/flatpickr.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

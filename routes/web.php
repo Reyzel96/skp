@@ -51,7 +51,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard', function () {
         $user = auth()->user();
-        $role = $user->roles()->orderBy('kategori', 'asc')->first();
+        $role = $user->roles()->orderBy('kategori', 'asc')->orderBy('id', 'asc')->first();
 
         if ($role && !empty($role->dashboard_route)) {
             if (Route::has($role->dashboard_route)) {

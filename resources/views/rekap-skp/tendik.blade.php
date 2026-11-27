@@ -19,12 +19,7 @@
                     </h1>
                     <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/60 backdrop-blur-sm border border-emerald-100 shadow-sm">
                         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <p class="text-emerald-800 text-sm font-bold tracking-wide">Periode: {{ $periode->tahun }} - 
-                            @if($periode->tipe == 'tahunan') {{ $periode->semester_genap }} / {{ $periode->semester_gasal }}
-                            @elseif($periode->tipe == 'semester') Semester {{ ucfirst($periode->semester) }}
-                            @elseif($periode->tipe == 'bulanan') Bulan {{ \Carbon\Carbon::create()->month($periode->bulan)->translatedFormat('F') }}
-                            @endif
-                        </p>
+                        <p class="text-emerald-800 text-sm font-bold tracking-wide">Periode: {{ $periode->nama_periode }}</p>
                     </div>
                 </div>
                 <div class="flex gap-3">

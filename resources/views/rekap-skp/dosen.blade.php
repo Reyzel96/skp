@@ -10,12 +10,7 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
                 <h1 class="text-3xl font-black text-gray-900 uppercase tracking-tighter">Rekap Nilai SKP Dosen</h1>
-                <p class="text-gray-500 text-sm font-medium">Periode: {{ $periode->tahun }} - 
-                    @if($periode->tipe == 'tahunan') {{ $periode->semester_genap }} / {{ $periode->semester_gasal }}
-                    @elseif($periode->tipe == 'semester') Semester {{ ucfirst($periode->semester) }}
-                    @elseif($periode->tipe == 'bulanan') Bulan {{ \Carbon\Carbon::create()->month($periode->bulan)->translatedFormat('F') }}
-                    @endif
-                </p>
+                <p class="text-gray-500 text-sm font-medium">Periode: {{ $periode->nama_periode }}</p>
             </div>
             <div class="flex gap-2">
                 <a href="{{ route('rekap-skp.index') }}" class="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition shadow-sm text-xs uppercase tracking-widest">

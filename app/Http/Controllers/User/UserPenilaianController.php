@@ -12,8 +12,18 @@ class UserPenilaianController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $periode = PeriodeSkp::orderBy('mulai', 'desc')->get();
-        $periodeId = $request->periode_id ?? $periode->where('status', 'aktif')->first()?->id;
+        $periode = PeriodeSkp::orderBy('mulai', 'desc')->orderBy('id', 'desc')->get();
+        $periodeId = $request->periode_id;
+        if (!$periodeId) {
+            // Prioritaskan periode aktif yang benar-benar punya SKP milik user.
+            $periodeAktif = $periode->where('status', 'aktif');
+            $periodeId = $periodeAktif->first(function ($p) use ($user) {
+                return \App\Models\SkpHeader::where('user_id', $user->id)->where('periode_skp_id', $p->id)->exists()
+                    || SkpTendik::where('user_id', $user->id)->where('periode_skp_id', $p->id)->exists()
+                    || SkpDosen::where('user_id', $user->id)->where('periode_skp_id', $p->id)->exists();
+            })?->id
+                ?? $periodeAktif->first()?->id;
+        }
 
         $nilaiSkp = 0;
         $perilaku = null;

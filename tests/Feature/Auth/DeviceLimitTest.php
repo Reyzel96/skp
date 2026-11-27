@@ -15,14 +15,33 @@ class DeviceLimitTest extends TestCase
     /**
      * phpunit.xml memakai SESSION_DRIVER=array sehingga sesi tidak pernah
      * tersimpan di tabel sessions. Uji device-limit butuh driver database.
+     *
+     * PENTING: override env dilakukan di setUp(), BUKAN di constructor.
+     * PHPUnit meng-instantiate semua class test saat discovery, jadi
+     * putenv() di constructor mencemari environment proses untuk SEMUA
+     * test lain (mis. ExampleTest ikut memakai driver database tanpa
+     * tabel sessions -> "no such table: sessions").
      */
-    public function __construct(string $name)
+    protected function setUp(): void
     {
-        parent::__construct($name);
-
         putenv('SESSION_DRIVER=database');
         $_ENV['SESSION_DRIVER'] = 'database';
         $_SERVER['SESSION_DRIVER'] = 'database';
+
+        parent::setUp();
+    }
+
+    /**
+     * putenv() mencemari environment level proses dan bertahan setelah
+     * test ini selesai; kembalikan ke nilai phpunit.xml (array).
+     */
+    protected function tearDown(): void
+    {
+        putenv('SESSION_DRIVER=array');
+        $_ENV['SESSION_DRIVER'] = 'array';
+        $_SERVER['SESSION_DRIVER'] = 'array';
+
+        parent::tearDown();
     }
 
     /**
