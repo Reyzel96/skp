@@ -91,9 +91,46 @@ class RekapSkpController extends Controller
 
     private function calculateRekap($users, $periode_id, $type)
     {
+        $userIds = $users->pluck('id')->toArray();
+        $allHeaders = SkpHeader::whereIn('user_id', $userIds)
+            ->where('periode_skp_id', $periode_id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+        $headersGroupedByUser = $allHeaders->groupBy('user_id');
+        $headerIds = $allHeaders->pluck('id')->toArray();
+
+        $skpTendikGrouped = collect();
+        $allPenilaianTendik = collect();
+        $allTambahan = collect();
+
+        $skpDosenGrouped = collect();
+        $allPenilaianDosen = collect();
+
+        if ($type === 'tendik' && !empty($headerIds)) {
+            $allSkpTendik = SkpTendik::whereIn('skp_header_id', $headerIds)->get();
+            $skpTendikIds = $allSkpTendik->pluck('id')->toArray();
+            if (!empty($skpTendikIds)) {
+                $allPenilaianTendik = PenilaianSkpTendik::whereIn('skp_tendik_id', $skpTendikIds)->get()->keyBy('skp_tendik_id');
+            }
+            $skpTendikGrouped = $allSkpTendik->groupBy('skp_header_id');
+            $allTambahan = SkpTugasTambahan::whereIn('skp_header_id', $headerIds)->get()->groupBy('skp_header_id');
+        } elseif ($type !== 'tendik' && !empty($headerIds)) {
+            $allSkpDosen = SkpDosen::whereIn('skp_header_id', $headerIds)->get();
+            $skpDosenIds = $allSkpDosen->pluck('id')->toArray();
+            if (!empty($skpDosenIds)) {
+                $allPenilaianDosen = PenilaianSkpDosen::whereIn('skp_dosen_id', $skpDosenIds)
+                    ->whereIn('user_id', $userIds)
+                    ->get()
+                    ->groupBy('skp_dosen_id');
+            }
+            $skpDosenGrouped = $allSkpDosen->groupBy('skp_header_id');
+        }
+
+        $allIndicators = !empty($headerIds) ? SkpPerilakuIndicator::whereIn('skp_header_id', $headerIds)->get()->groupBy('skp_header_id') : collect();
+
         $data = [];
         foreach ($users as $u) {
-            $headers = SkpHeader::where('user_id', $u->id)->where('periode_skp_id', $periode_id)->orderBy('created_at', 'asc')->get();
+            $headers = $headersGroupedByUser->get($u->id) ?? collect();
             
             if ($headers->isEmpty()) {
                 $data[] = [
@@ -116,28 +153,30 @@ class RekapSkpController extends Controller
 
                 // Calculate SKP Score
                 if ($type === 'tendik') {
-                    $skpUtama = SkpTendik::where('skp_header_id', $header->id)->get();
+                    $skpUtama = $skpTendikGrouped->get($header->id) ?? collect();
                     $totalMaster = 0;
                     foreach ($skpUtama as $skp) {
-                        $penilaian = PenilaianSkpTendik::where('skp_tendik_id', $skp->id)->first();
+                        $penilaian = $allPenilaianTendik->get($skp->id);
                         $totalMaster += $penilaian ? $penilaian->nilai_capaian : 0;
                     }
                     $avgUtama = $skpUtama->count() > 0 ? ($totalMaster / $skpUtama->count()) : 0;
                     
-                    $tambahan = SkpTugasTambahan::where('skp_header_id', $header->id)->sum('penghitungan') ?? 0;
+                    $tambahanList = $allTambahan->get($header->id) ?? collect();
+                    $tambahan = $tambahanList->sum('penghitungan');
                     $scoreSkp = $avgUtama + $tambahan;
                 } else {
-                    $skpUtama = SkpDosen::where('skp_header_id', $header->id)->get();
+                    $skpUtama = $skpDosenGrouped->get($header->id) ?? collect();
                     $totalMaster = 0;
                     foreach ($skpUtama as $skp) {
-                        $penilaian = PenilaianSkpDosen::where('skp_dosen_id', $skp->id)->where('user_id', $u->id)->first();
+                        $penilaianList = $allPenilaianDosen->get($skp->id) ?? collect();
+                        $penilaian = $penilaianList->firstWhere('user_id', $u->id);
                         $totalMaster += $penilaian ? $penilaian->nilai_capaian : 0;
                     }
                     $scoreSkp = $skpUtama->count() > 0 ? ($totalMaster / $skpUtama->count()) : 0;
                 }
 
                 // Calculate Perilaku Score
-                $indicators = SkpPerilakuIndicator::where('skp_header_id', $header->id)->get();
+                $indicators = $allIndicators->get($header->id) ?? collect();
                 if ($indicators->count() > 0) {
                     $aspekScores = $indicators->groupBy('aspek')->map(fn($group) => $group->avg('nilai'));
                     $scorePerilaku = $aspekScores->avg() ?? 0;
@@ -171,9 +210,30 @@ class RekapSkpController extends Controller
 
     private function calculateRekapKualitatif($users, $periode_id)
     {
+        $userIds = $users->pluck('id')->toArray();
+        $allHeaders = SkpHeader::whereIn('user_id', $userIds)
+            ->where('periode_skp_id', $periode_id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+        $headersGroupedByUser = $allHeaders->groupBy('user_id');
+        $headerIds = $allHeaders->pluck('id')->toArray();
+
+        $skpUtamasGrouped = collect();
+        $skpPerilakusGrouped = collect();
+
+        if (!empty($headerIds)) {
+            $skpUtamasGrouped = \App\Models\SkpKualitatif::whereIn('skp_header_id', $headerIds)
+                ->get()
+                ->groupBy('skp_header_id');
+
+            $skpPerilakusGrouped = \App\Models\SkpKualitatifPerilaku::whereIn('skp_header_id', $headerIds)
+                ->get()
+                ->groupBy('skp_header_id');
+        }
+
         $data = [];
         foreach ($users as $u) {
-            $headers = SkpHeader::where('user_id', $u->id)->where('periode_skp_id', $periode_id)->orderBy('created_at', 'asc')->get();
+            $headers = $headersGroupedByUser->get($u->id) ?? collect();
             
             if ($headers->isEmpty()) {
                 $data[] = [
@@ -189,7 +249,7 @@ class RekapSkpController extends Controller
             foreach ($headers as $header) {
                 $status = $header->status ?? 'Belum Mulai';
 
-                $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $header->id)->get();
+                $skpUtamas = $skpUtamasGrouped->get($header->id) ?? collect();
                 $sumH = 0; $countH = 0;
                 foreach($skpUtamas as $hk) {
                     if ($hk->hasil_kerja) {
@@ -208,7 +268,7 @@ class RekapSkpController extends Controller
                     else $ratingH = 'DIBAWAH EKSPEKTASI';
                 }
 
-                $skpPerilakus = \App\Models\SkpKualitatifPerilaku::where('skp_header_id', $header->id)->get();
+                $skpPerilakus = $skpPerilakusGrouped->get($header->id) ?? collect();
                 $sumP = 0; $countP = 0;
                 foreach($skpPerilakus as $pk) {
                     if ($pk->hasil_kerja) {
