@@ -371,7 +371,19 @@ class SuperAdminController extends Controller
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
         $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
 
-        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans'));
+        // Tugas 27: opsi pangkat utk nilai tersimpan dirender SERVER-SIDE (bukan via
+        // fetch JS seperti sebelumnya) — pangkat milik jenjang aktif profil user.
+        // PENTING: akses relasi via getRelationValue() — property dinamis camel
+        // 'pangkatGolongan' tertangkap accessor getPangkatGolonganAttribute (nama
+        // bentrok dgn kolom 'pangkat_golongan') sehingga selalu NULL.
+        $pangkatGolongans = collect();
+        if ($user->profile?->getRelationValue('pangkatGolongan')?->jenjang_jabatan_id) {
+            $pangkatGolongans = PangkatGolongan::where('jenjang_jabatan_id', $user->profile->getRelationValue('pangkatGolongan')->jenjang_jabatan_id)
+                ->orderBy('urutan')
+                ->get();
+        }
+
+        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans', 'pangkatGolongans'));
     }
 
     public function usersStore(Request $request)
