@@ -52,7 +52,11 @@
                                 Menu ini tetap tampil untuk Super Admin terlepas dari pengaturan ini.
                             </p>
                         </div>
-                        <form action="{{ route('superadmin.settings.toggle') }}" method="POST" class="shrink-0">
+                        {{-- data-turbo="false": submit diarahkan sebagai full page reload agar sidebar
+                             (data-turbo-permanent) ikut ter-render ulang dengan setting terbaru.
+                             x-data guard: cegah double-submit cepat yang membalik nilai dua kali. --}}
+                        <form action="{{ route('superadmin.settings.toggle') }}" method="POST" data-turbo="false" class="shrink-0"
+                              x-data="{ submitted: false }" x-on:submit="if (submitted) $event.preventDefault(); submitted = true">
                             @csrf
                             <input type="hidden" name="key" value="show_skp_dosen_kuantitatif">
                             <button type="submit"
