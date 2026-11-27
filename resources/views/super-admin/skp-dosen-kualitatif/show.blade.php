@@ -6,12 +6,56 @@
     @endsection
 
     @section('content')
-        <div class="p-6" x-data="{ activeTab: 'skp' }">
+        <div class="p-6" x-data="{
+            activeTab: 'skp',
+            syncModal: false,
+            syncLoading: false,
+            syncPreview: null,
+            syncStale: false,
+            syncError: null,
+            openSyncModal() {
+                this.syncModal = true;
+                this.syncLoading = true;
+                this.syncPreview = null;
+                this.syncStale = false;
+                this.syncError = null;
+                fetch('{{ route('superadmin.skp-dosen-kualitatif.lampiran-sync.preview', $skpKualitatif->skp_header_id) }}')
+                    .then(res => res.json())
+                    .then(data => { this.syncPreview = data.preview; this.syncLoading = false; })
+                    .catch(() => { this.syncError = 'Gagal memuat preview.'; this.syncLoading = false; });
+                setTimeout(() => { this.syncStale = true; }, 5 * 60 * 1000);
+            },
+            applySync() {
+                if (!confirm('Terapkan perubahan kotak upload sesuai kondisi TERKINI? Yang di-apply dihitung ulang dari data saat ini, bukan dari preview yang mungkin sudah basi.')) return;
+                this.syncLoading = true;
+                this.syncError = null;
+                fetch('{{ route('superadmin.skp-dosen-kualitatif.lampiran-sync.apply', $skpKualitatif->skp_header_id) }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                })
+                .then(res => res.json().then(d => ({ ok: res.ok, status: res.status, data: d })))
+                .then(({ ok, status, data }) => {
+                    if (ok && data.success) {
+                        this.syncPreview = data.applied;
+                        this.syncModal = false;
+                        window.location.reload();
+                    } else {
+                        this.syncError = data.message || 'Gagal sinkron.';
+                        this.syncLoading = false;
+                    }
+                })
+                .catch(err => { this.syncError = 'Gagal sinkron (jaringan/server).'; this.syncLoading = false; });
+            }
+        }">
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800">Detail Target SKP Dosen Kualitatif</h1>
                 </div>
                 <div class="flex gap-2">
+                    <button type="button" @click="openSyncModal()"
+                        class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md transition-all">
+                        <i class="fas fa-sync-alt mr-2"></i> Sinkron Ulang Persyaratan Lampiran
+                    </button>
                     <a href="{{ route('superadmin.skp-dosen-kualitatif.edit', $skpKualitatif->id) }}"
                         class="inline-flex items-center px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-edit mr-2"></i> Edit
@@ -20,6 +64,69 @@
                         class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-arrow-left mr-2"></i> Kembali
                     </a>
+                </div>
+            </div>
+
+            {{-- MODAL PREVIEW SINKRON --}}
+            <div x-show="syncModal" x-cloak style="z-index: 99999;" class="fixed inset-0 z-50 overflow-y-auto bg-gray-900/80 backdrop-blur-sm">
+                <div class="flex min-h-screen w-full items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-3xl w-full relative max-h-[90vh] overflow-y-auto">
+                        <h2 class="text-xl font-black text-gray-800 mb-1">Preview Sinkron Persyaratan Lampiran</h2>
+                        <p class="text-sm text-gray-500 mb-4">Yang di-apply dihitung ulang dari data TERKINI saat tombol Konfirmasi diklik — bukan dari daftar ini (data mungkin sudah berubah).</p>
+
+                        <template x-if="syncLoading">
+                            <div class="py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Memuat preview...</div>
+                        </template>
+
+                        <template x-if="syncError">
+                            <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 rounded-r mb-4 text-sm" x-text="syncError"></div>
+                        </template>
+
+                        <template x-if="syncPreview && !syncLoading">
+                            <div class="space-y-4">
+                                <div>
+                                    <h3 class="font-bold text-green-700 mb-2"><i class="fas fa-plus-circle mr-1"></i> Akan DITAMBAHKAN (<span x-text="syncPreview.add.length"></span>)</h3>
+                                    <template x-if="syncPreview.add.length === 0"><p class="text-sm text-gray-400 italic pl-5">Tidak ada.</p></template>
+                                    <template x-for="item in syncPreview.add" :key="'a'+item.child_id">
+                                        <div class="text-sm pl-5 py-1 border-b border-gray-100">
+                                            <span class="font-bold text-gray-700" x-text="'#' + item.child_id + ' '"></span>
+                                            <span class="text-gray-600" x-text="item.label || '(tanpa label — auto-detect)'"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-red-700 mb-2"><i class="fas fa-minus-circle mr-1"></i> Akan DIHAPUS (<span x-text="syncPreview.remove.length"></span>)</h3>
+                                    <template x-if="syncPreview.remove.length === 0"><p class="text-sm text-gray-400 italic pl-5">Tidak ada.</p></template>
+                                    <template x-for="item in syncPreview.remove" :key="'r'+item.child_id">
+                                        <div class="text-sm pl-5 py-1 border-b border-gray-100">
+                                            <span class="font-bold text-gray-700" x-text="'#' + item.child_id + ' '"></span>
+                                            <span class="text-gray-600" x-text="item.label || '(tanpa label)'"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-gray-600 mb-2"><i class="fas fa-lock mr-1"></i> Dikecualikan karena sudah ada realisasi/bukti dosen (<span x-text="syncPreview.skip_has_realisasi.length"></span>)</h3>
+                                    <template x-if="syncPreview.skip_has_realisasi.length === 0"><p class="text-sm text-gray-400 italic pl-5">Tidak ada.</p></template>
+                                    <template x-for="item in syncPreview.skip_has_realisasi" :key="'s'+item.child_id">
+                                        <div class="text-sm pl-5 py-1 border-b border-gray-100">
+                                            <span class="font-bold text-gray-700" x-text="'#' + item.child_id + ' '"></span>
+                                            <span class="text-gray-500">tidak dihapus — sudah berisi realisasi</span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="pt-4 border-t flex justify-end gap-3">
+                                    <button type="button" @click="syncModal = false"
+                                        class="px-5 py-2.5 rounded-lg border-2 border-gray-200 text-gray-600 font-bold uppercase text-sm hover:bg-gray-100">Batal</button>
+                                    <button type="button" @click="applySync()" :disabled="syncLoading || syncStale"
+                                        :class="syncStale ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'"
+                                        class="px-5 py-2.5 rounded-lg font-bold uppercase text-sm shadow-md transition-all">
+                                        <i class="fas fa-check mr-1"></i>
+                                        <span x-text="syncStale ? 'Preview basi — refresh' : 'Konfirmasi Sinkron'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
 
@@ -168,20 +275,18 @@
                         <tr class="bg-light-gray">
                             <td colspan="4" class="font-bold">PERILAKU KERJA*</td>
                         </tr>
-                        @foreach($perilakuAcuan as $idx => $parent)
+                        {{-- Dari snapshot rows skp_kualitatif_perilakus (terkunci saat SKP dibuat),
+                             BUKAN master Acuan live — konsisten dgn dosen & penilai evaluasi. --}}
+                        @foreach($perilakus as $idx => $perilaku)
                         <tr>
                             <td class="text-center font-bold w-12 align-top">{{ $idx + 1 }}</td>
                             <td colspan="2" class="align-top">
-                                <div class="font-bold mb-1">{{ $parent->sasaran_kinerja }}</div>
-                                <ul class="list-none pl-0 m-0 text-gray-700">
-                                    @foreach($parent->children as $child)
-                                    <li>- {{ trim($child->indikator_kinerja) }}</li>
-                                    @endforeach
-                                </ul>
+                                <div class="font-bold mb-1 {{ strtolower($perilaku->aspek) == 'kepemimpinan' ? 'italic' : '' }}">{{ $perilaku->aspek }}</div>
+                                <div class="whitespace-pre-wrap text-gray-700 pl-4">{!! nl2br(e($perilaku->indikator)) !!}</div>
                             </td>
                             <td class="align-top">
                                 <div class="font-bold mb-1">Ekspektasi Khusus Pimpinan:</div>
-                                <div class="whitespace-pre-wrap">{{ $perilakus->where("aspek", $parent->sasaran_kinerja)->first()->ekspektasi_pimpinan ?? "-" }}</div>
+                                <div class="whitespace-pre-wrap">{{ $perilaku->ekspektasi_pimpinan ?? "-" }}</div>
                             </td>
                         </tr>
                         @endforeach

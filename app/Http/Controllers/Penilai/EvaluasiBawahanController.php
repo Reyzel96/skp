@@ -41,6 +41,37 @@ class EvaluasiBawahanController extends Controller
         return view('penilai.evaluasi.index', compact('pendingHeaders', 'historyHeaders', 'isBypassRole'));
     }
 
+    /**
+     * Export PDF tab yang sedang aktif di halaman Evaluasi Bawahan (SKP Dosen Kualitatif).
+     * Render server-side via DomPDF — hasil bebas header/footer browser (tanpa URL).
+     * Query param ?tab= skp|lampiran|evaluasi|dokumen (default: evaluasi).
+     */
+    public function exportPdfKualitatif(Request $request, $header_id)
+    {
+        // Izinkan hanya tab yang dikenal.
+        $tab = $request->query('tab', 'evaluasi');
+        if (!in_array($tab, ['skp', 'lampiran', 'evaluasi', 'dokumen'], true)) {
+            $tab = 'evaluasi';
+        }
+
+        // Muat data yang sama persis dengan show() — cukup render view utama
+        // dengan flag export, sehingga isi & urutan selalu konsisten dgn layar.
+        $response = app()->call([$this, 'show'], ['header_id' => $header_id]);
+        if (!$response instanceof \Illuminate\View\View) {
+            return $response; // abort() dari show() (403 dsb.) diteruskan apa adanya
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('penilai.evaluasi.export-kualitatif', [
+                'contentView' => $response->getName(),
+                'data'        => $response->getData(),
+                'exportTab'   => $tab,
+            ])
+            ->setPaper('a4', 'landscape');
+
+        $namaFile = 'SKP-Kualitatif-' . ($tab) . '-' . $header_id . '.pdf';
+        return $pdf->stream($namaFile);
+    }
+
     public function show($header_id)
     {
         $penilai = Auth::user();
@@ -57,11 +88,12 @@ class EvaluasiBawahanController extends Controller
                 'perilakuIndicators'
             ])->findOrFail($header_id);
         
-        $isBypassRole = $penilai->hasAnyRole(['Dekan', 'Rektorat', 'Rektor']) || 
+        $isBypassRole = $penilai->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2']) || 
                         $penilai->roles->contains(fn($r) => str_contains($r->name, 'Kaprodi'));
         $isAssignedEvaluator = ($header->penilai_utama_id == $penilai->id || $header->penilai_akhir_id == $penilai->id || $header->pejabat_penilai_id == $penilai->id || $header->atasan_pejabat_penilai_id == $penilai->id);
 
         // Pastikan user yang login adalah salah satu penilai di SKP ini ATAU pimpinan (Bypass/Monitor)
+        // (selaras dgn guard index()/verify(): Wadek 1 & Wadek 2 juga boleh memantau)
         if (!$isAssignedEvaluator && !$isBypassRole) {
             abort(403, 'Anda tidak memiliki hak akses untuk melihat SKP ini.');
         }
@@ -81,14 +113,18 @@ class EvaluasiBawahanController extends Controller
             $skpUtamas = \App\Models\SkpKualitatif::where('skp_header_id', $header->id)->where('jenis', 'utama')->with('acuanParent.children')->get();
             $perilakuAcuan = \App\Models\SkpKualitatifAcuanParent::where('kategori', 'perilaku')->with('children')->get();
 
-            $distribusiNilai = \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', [
+            $distribusiNilai = \Illuminate\Support\Facades\Cache::get(
+                \App\Models\PeriodeSkp::cacheRumusKey('distribusi_nilai_skp', $periodeId)
+            ) ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', [
                 'Istimewa' => [0, 1, 20, 158, 542],
                 'Baik' => [83, 125, 250, 458, 83],
                 'Butuh Perbaikan' => [125, 167, 417, 167, 125],
                 'Kurang/Misconduct' => [83, 458, 250, 125, 83],
                 'Sangat Kurang' => [542, 292, 125, 42, 0]
             ]);
-            $hasilKerja = \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+            $hasilKerja = \Illuminate\Support\Facades\Cache::get(
+                \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $periodeId)
+            ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
 
             return view('penilai.evaluasi.show-kualitatif', compact(
                 'header', 'penilai', 'bawahan', 'skpKualitatif', 'tambahans', 
@@ -330,8 +366,6 @@ class EvaluasiBawahanController extends Controller
             abort(403);
         }
 
-        if ($resp = $this->pastikanPenilaianBuka($header->periode_skp_id)) return $resp;
-
         $request->validate([
             'status' => 'required|string|in:Selesai,Ditolak,Draft',
             'catatan_penilai' => 'nullable|string',
@@ -339,9 +373,24 @@ class EvaluasiBawahanController extends Controller
             'umpan_balik' => 'nullable|array'
         ]);
 
+        // Draf (Simpan Sementara) bebas tenggat: tanpa cek periode.
+        // Validasi status di atas sudah whitelist, jadi hanya 'Draft' yang
+        // dianggap draf — nilai lain (Selesai/Ditolak) = aksi final wajib cek tenggat.
+        $isDraftSave = $request->input('status') == 'Draft';
+
+        if (!$isDraftSave) {
+            if ($resp = $this->pastikanPenilaianBuka($header->periode_skp_id)) return $resp;
+        }
+
+        // Draf tidak boleh menimpa SKP yang sudah difinalisasi.
+        // (Cek SEBELUM transaksi dibuka supaya tidak ada return
+        //  dari dalam try yang transaksinya sudah terbuka.)
+        if ($isDraftSave && $header->status === 'Selesai') {
+            return back()->with('error', 'SKP ini sudah difinalisasi (Selesai) dan tidak bisa diubah lagi, termasuk simpan sementara.');
+        }
+
         DB::beginTransaction();
         try {
-            $isDraftSave = $request->input('status') == 'Draft';
             $pesan = 'Perubahan evaluasi (Kualitatif) berhasil disimpan sementara.';
 
             if (!$isDraftSave) {
@@ -459,13 +508,13 @@ class EvaluasiBawahanController extends Controller
 
         $sumUtama = 0;
         foreach ($utamaItems as $item) {
-            $sumUtama += $this->hasilKerjaToScore($item->hasil_kerja);
+            $sumUtama += $this->hasilKerjaToScore($item->hasil_kerja, $header->periode_skp_id);
         }
         $avgUtama = $utamaItems->count() > 0 ? $sumUtama / $utamaItems->count() : 0;
 
         $sumPerilaku = 0;
         foreach ($perilakuItems as $item) {
-            $sumPerilaku += $this->hasilKerjaToScore($item->hasil_kerja);
+            $sumPerilaku += $this->hasilKerjaToScore($item->hasil_kerja, $header->periode_skp_id);
         }
         $avgPerilaku = $perilakuItems->count() > 0 ? $sumPerilaku / $perilakuItems->count() : 0;
 
@@ -482,12 +531,22 @@ class EvaluasiBawahanController extends Controller
         ]);
     }
 
-    private function hasilKerjaToScore(?string $hasilKerja): int
+    /**
+     * Bobot hasil kerja dari Cache rumus admin (sama sumber dgn JS client
+     * hasilKerjaMap: index 0=Diatas, 1=Sesuai, 2=Dibawah).
+     * Non-retroaktif: skp_headers final TIDAK dihitung ulang — nilai tersimpan
+     * tetap; hanya SKP yang dinilai SETELAH bobot berubah yang terdampak.
+     */
+    private function hasilKerjaToScore(?string $hasilKerja, ?int $periodeId = null): int
     {
+        $bobot = \Illuminate\Support\Facades\Cache::get(
+            $periodeId ? \App\Models\PeriodeSkp::cacheRumusKey('hasil_kerja_skp', $periodeId) : 'hasil_kerja_skp'
+        ) ?? \Illuminate\Support\Facades\Cache::get('hasil_kerja_skp', [3, 2, 1]);
+
         return match ($hasilKerja) {
-            'Diatas Ekspektasi' => 3,
-            'Sesuai Ekspektasi' => 2,
-            'Dibawah Ekspektasi' => 1,
+            'Diatas Ekspektasi' => (int) ($bobot[0] ?? 3),
+            'Sesuai Ekspektasi' => (int) ($bobot[1] ?? 2),
+            'Dibawah Ekspektasi' => (int) ($bobot[2] ?? 1),
             default => 0,
         };
     }

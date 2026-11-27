@@ -54,15 +54,7 @@
                                     {{ request('periode_id') == $p->id ? 'selected' : '' }}
                                     {{ $isNonSelectable ? 'disabled' : '' }}
                                     class="{{ $isNonSelectable ? 'text-gray-400 bg-gray-100 italic' : '' }}">
-                                    @if($p->tipe == 'tahunan')
-                                        Tahun {{ $p->tahun }} : {{ $p->semester_genap }} / {{ $p->semester_gasal }}
-                                    @elseif($p->tipe == 'semester')
-                                        Tahun {{ $p->tahun }} : Semester {{ ucfirst($p->semester) }}
-                                    @elseif($p->tipe == 'bulanan')
-                                        Tahun {{ $p->tahun }} : Bulan {{ \Carbon\Carbon::create()->month($p->bulan)->translatedFormat('F') }}{{ $p->bulan_akhir ? ' — ' . \Carbon\Carbon::create()->month($p->bulan_akhir)->translatedFormat('F') : '' }}
-                                    @else
-                                        Tahun {{ $p->tahun }}
-                                    @endif
+                                    {{ $p->nama_periode }}
                                     ({{ strtoupper($p->status) }})
                                 </option>
                             @endforeach
@@ -87,7 +79,7 @@
 
                         <tbody class="divide-y divide-gray-100">
                             @forelse($skpKualitatifs as $skp)
-                                <tr onclick="window.location='{{ route('superadmin.skp-dosen-kualitatif.show', $skp->id) }}'" class="hover:bg-emerald-50/50 transition-colors group cursor-pointer">
+                                <tr data-turbo-row="{{ route('superadmin.skp-dosen-kualitatif.show', $skp->id) }}" class="hover:bg-emerald-50/50 transition-colors group cursor-pointer">
                                     <td class="px-4 py-4 text-center text-gray-500 align-top" onclick="event.stopPropagation()">{{ $loop->iteration }}</td>
                                     <td class="px-4 py-4 align-top">
                                         <p class="font-bold text-gray-900">

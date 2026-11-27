@@ -152,9 +152,18 @@ class MasterSkpTendikController extends Controller
 
         $user = User::find($request->user_id);
 
+        // Guard duplikat: satu pegawai hanya boleh punya satu header per periode
+        $duplikat = \App\Models\SkpHeader::where('periode_skp_id', $request->periode_skp_id)
+            ->where('user_id', $user->id)
+            ->exists();
+        if ($duplikat) {
+            return back()->withInput()->with('error', 'SKP untuk pegawai ini pada periode tersebut sudah ada. Silakan edit SKP yang sudah ada.');
+        }
+
         DB::beginTransaction();
         try {
             // ✅ 1. SELALU BUAT HEADER BARU (Agar tidak merge jika periode sama)
+            // Unik per (periode, pegawai) — guard duplikat & constraint DB di atas.
             $header = \App\Models\SkpHeader::create([
                 'user_id' => $user->id,
                 'periode_skp_id' => $request->periode_skp_id,
@@ -245,10 +254,26 @@ class MasterSkpTendikController extends Controller
 
             DB::commit();
             return redirect()->route('superadmin.master-skp-tendik.index')->with('success', 'Master Tupoksi, Target SKP, dan Perilaku berhasil disimpan!');
+        } catch (\Illuminate\Database\QueryException $e) {
+            DB::rollBack();
+            // Jaring pengaman race condition: constraint unik (periode_skp_id, user_id)
+            if ($this->adalahPelanggaranUnikHeader($e)) {
+                return back()->withInput()->with('error', 'SKP untuk pegawai ini pada periode tersebut sudah ada. Silakan edit SKP yang sudah ada.');
+            }
+            throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Gagal menyimpan: ' . $e->getMessage())->withInput();
         }
+    }
+
+    /**
+     * Deteksi pelanggaran unique constraint skp_headers_periode_user_unique.
+     */
+    private function adalahPelanggaranUnikHeader(\Illuminate\Database\QueryException $e): bool
+    {
+        return str_contains($e->getMessage(), 'skp_headers_periode_user_unique')
+            || in_array((int) ($e->errorInfo[1] ?? 0), [1062, 19, 23505], true);
     }
 
     public function update(Request $request, $id)

@@ -181,7 +181,11 @@
                         <tr class="hover:bg-gray-50 transition">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 @php
-                                    $isOnline = \Cache::has('user-online-' . $user->id);
+                                    $activeSince = now()->getTimestamp() - 300;
+                                    $isOnline = \Illuminate\Support\Facades\DB::table('sessions')
+                                        ->where('user_id', $user->id)
+                                        ->where('last_activity', '>=', $activeSince)
+                                        ->exists();
                                     $canDelete = $user->id !== auth()->id() && !$isOnline;
                                 @endphp
                                 @if($canDelete)
@@ -220,11 +224,9 @@
                                     <a href="{{ route('superadmin.users.edit', $user) }}" class="text-blue-600 hover:text-blue-900 font-bold bg-blue-50 px-3 py-1 rounded">Edit</a>
 
                                     @if ($canDelete)
-                                        <form action="{{ route('superadmin.users.destroy', $user) }}" method="POST" class="inline m-0">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="text-red-600 hover:text-red-900 font-bold bg-red-50 px-3 py-1 rounded" onclick="return confirm('Yakin hapus user ini?')">Hapus</button>
-                                        </form>
+                                        {{-- Tombol di LUAR form bulk-invalid: pakai attribute form=
+                                             (HTML5) → submit native TANPA JS ke form hapus terpisah. --}}
+                                        <button type="submit" form="hapus-user-{{ $user->id }}" class="text-red-600 hover:text-red-900 font-bold bg-red-50 px-3 py-1 rounded">Hapus</button>
                                     @else
                                         @if($isOnline && $user->id !== auth()->id())
                                             <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded border border-emerald-200">Online</span>
@@ -243,40 +245,101 @@
         </div>
         </form>
 
+        {{-- Form hapus per-baris: DI LUAR form bulk (nested <form> invalid di HTML —
+             parser menutup form bulk lebih awal sehingga checkbox ids[] (line atas)
+             tidak pernah terasosiasi ke form bulk → bulk delete tidak mengirim ids[]).
+             Tombol Hapus per-baris menunjuk form ini via attribute form= (HTML5),
+             konfirmasi via onsubmit, submit native TANPA JS. --}}
+        @foreach ($users as $user)
+            @php
+                $isOnlineHapus = \Illuminate\Support\Facades\DB::table('sessions')
+                    ->where('user_id', $user->id)
+                    ->where('last_activity', '>=', now()->getTimestamp() - 300)
+                    ->exists();
+                $canDeleteHapus = $user->id !== auth()->id() && !$isOnlineHapus;
+            @endphp
+            @if($canDeleteHapus)
+                <form id="hapus-user-{{ $user->id }}" action="{{ route('superadmin.users.destroy', $user) }}" method="POST" class="hidden" onsubmit="return confirm('Yakin hapus user ini?')">
+                    @csrf
+                    @method('DELETE')
+                </form>
+            @endif
+        @endforeach
+
         <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const checkAll = document.getElementById('check-all');
-                const checkboxes = document.querySelectorAll('.user-checkbox');
-                const btnBulkDelete = document.getElementById('btn-bulk-delete');
-                const countSelected = document.getElementById('count-selected');
+            // Turbo Drive mengganti <body> tanpa reload — DOMContentLoaded tidak
+            // terpicu ulang (pola lama membuat checkbox bulk mati setelah navigasi
+            // Turbo). Pola init: jalankan saat DOM siap ATAU turbo:load, dengan
+            // guard dataset anti double-bind + cleanup di turbo:before-cache.
+            (function () {
+                function initUsersPage() {
+                    try {
+                        const checkAll = document.getElementById('check-all');
+                        const btnBulkDelete = document.getElementById('btn-bulk-delete');
+                        const countSelected = document.getElementById('count-selected');
+                        if (!checkAll || !btnBulkDelete || !countSelected) return;
+                        if (checkAll.dataset.usersInit) return;
+                        checkAll.dataset.usersInit = '1';
 
-                function updateBulkDeleteButton() {
-                    const checkedCount = document.querySelectorAll('.user-checkbox:checked').length;
-                    countSelected.textContent = checkedCount;
-                    if (checkedCount > 0) {
-                        btnBulkDelete.classList.remove('hidden');
-                    } else {
-                        btnBulkDelete.classList.add('hidden');
-                    }
-                    
-                    if (checkboxes.length > 0) {
-                        checkAll.checked = checkedCount === checkboxes.length;
-                    }
-                }
+                        function updateBulkDeleteButton() {
+                            try {
+                                const checkedCount = document.querySelectorAll('.user-checkbox:checked').length;
+                                countSelected.textContent = checkedCount;
+                                if (checkedCount > 0) {
+                                    btnBulkDelete.classList.remove('hidden');
+                                } else {
+                                    btnBulkDelete.classList.add('hidden');
+                                }
 
-                if (checkAll) {
-                    checkAll.addEventListener('change', function() {
-                        checkboxes.forEach(cb => {
-                            cb.checked = this.checked;
+                                const checkboxes = document.querySelectorAll('.user-checkbox');
+                                if (checkboxes.length > 0) {
+                                    checkAll.checked = checkedCount === checkboxes.length;
+                                }
+                            } catch (e) {
+                                console.error('users: gagal update tombol bulk delete', e);
+                            }
+                        }
+
+                        checkAll.addEventListener('change', function () {
+                            document.querySelectorAll('.user-checkbox').forEach(cb => {
+                                cb.checked = checkAll.checked;
+                            });
+                            updateBulkDeleteButton();
                         });
+
+                        document.querySelectorAll('.user-checkbox').forEach(cb => {
+                            if (!cb.dataset.usersInit) {
+                                cb.dataset.usersInit = '1';
+                                cb.addEventListener('change', updateBulkDeleteButton);
+                            }
+                        });
+
                         updateBulkDeleteButton();
-                    });
+                    } catch (e) {
+                        console.error('users: inisialisasi halaman gagal', e);
+                    }
                 }
 
-                checkboxes.forEach(cb => {
-                    cb.addEventListener('change', updateBulkDeleteButton);
-                });
-            });
+                function cleanupUsersPage() {
+                    try {
+                        const checkAll = document.getElementById('check-all');
+                        if (checkAll) delete checkAll.dataset.usersInit;
+                        document.querySelectorAll('.user-checkbox').forEach(cb => {
+                            delete cb.dataset.usersInit;
+                        });
+                    } catch (e) {
+                        console.error('users: cleanup gagal', e);
+                    }
+                }
+
+                if (document.readyState !== 'loading') {
+                    initUsersPage();
+                } else {
+                    document.addEventListener('DOMContentLoaded', initUsersPage, { once: true });
+                }
+                document.addEventListener('turbo:load', initUsersPage);
+                document.addEventListener('turbo:before-cache', cleanupUsersPage);
+            })();
         </script>
     @endsection
 </x-app-layout>

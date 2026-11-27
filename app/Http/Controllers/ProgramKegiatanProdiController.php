@@ -235,7 +235,7 @@ public function approve(Request $request, ProgramKegiatanProdi $pengajuan)
     if ($validated['action'] === 'tolak') {
         $pengajuan->update([
             'status_persetujuan' => 'ditolak', 
-            'catatan' => $validated['catatan']
+            'catatan' => $validated['catatan'] ?? null
         ]);
     } else {
         if ($user->hasRole('Dekan') && $pengajuan->status_persetujuan === 'pending') {
@@ -252,7 +252,7 @@ public function approve(Request $request, ProgramKegiatanProdi $pengajuan)
                 'anggaran_disetujui_prodi' => $pagu,
                 'sisa_anggaran' => $pagu,
                 'wadek_can_edit' => $canEdit,
-                'catatan' => $validated['catatan']
+                'catatan' => $validated['catatan'] ?? null
             ]);
         } elseif ($user->hasRole('Wadek 2') && $pengajuan->status_persetujuan === 'disetujui_dekan') {
             // Jika Wadek boleh edit, ambil nominal dari input, jika tidak pakai yang sudah ada
@@ -266,14 +266,14 @@ public function approve(Request $request, ProgramKegiatanProdi $pengajuan)
                 'approved_by_wadek' => $user->id,
                 'anggaran_disetujui_prodi' => $paguFinal,
                 'sisa_anggaran' => $paguFinal,
-                'catatan' => $validated['catatan']
+                'catatan' => $validated['catatan'] ?? null
             ]);
         } elseif ($user->hasRole('Admin Keuangan Fakultas') && $pengajuan->status_persetujuan === 'disetujui_wadek') {
             $pengajuan->update([
                 'status_persetujuan' => 'disetujui_admin', 
                 'approved_by_admin' => $user->id, 
                 'approved_at' => now(),
-                'catatan' => $validated['catatan']
+                'catatan' => $validated['catatan'] ?? null
             ]);
         }
     }

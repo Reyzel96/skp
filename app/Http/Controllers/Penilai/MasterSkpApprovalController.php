@@ -400,6 +400,17 @@ class MasterSkpApprovalController extends Controller implements HasMiddleware
         $user = Auth::user();
         $isBypassRole = $user->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2']);
 
+        // Selalu bekerja pada header yang diminta dari route (bukan header "terbaru" milik pegawai)
+        $header = \App\Models\SkpHeader::findOrFail($headerId);
+        $userId = $header->user_id;
+
+        $isAuthorized = $isBypassRole
+            || ($header->pejabat_penilai_id == $user->id)
+            || ($header->atasan_pejabat_penilai_id == $user->id);
+        if (!$isAuthorized) {
+            abort(403, 'Hanya Pejabat Penilai atau Atasan yang dapat menyimpan perubahan.');
+        }
+
         DB::beginTransaction();
         try {
             // 1. Update Existing Activities
@@ -446,9 +457,6 @@ class MasterSkpApprovalController extends Controller implements HasMiddleware
 
             // 2. Simpan Tupoksi & Operasional Baru (jika ada)
             if ($request->has('new_activities')) {
-                $header = \App\Models\SkpHeader::where('user_id', $userId)->latest()->first();
-                if (!$header) throw new \Exception("Header SKP tidak ditemukan.");
-
                 foreach ($request->new_activities as $act) {
                     if (!empty($act['jenis_aktivitas'])) {
                         // a. Simpan ke Master (Template)
@@ -492,55 +500,49 @@ class MasterSkpApprovalController extends Controller implements HasMiddleware
 
             // 3. Simpan Tugas Tambahan Baru (jika ada)
             if ($request->has('new_tugas')) {
-                $header = \App\Models\SkpHeader::where('user_id', $userId)->latest()->first();
-                if ($header) {
-                    foreach ($request->new_tugas as $tugasData) {
-                        if (!empty($tugasData['kegiatan'])) {
-                            $p_val = 0;
-                            if (!empty($tugasData['realisasi_kegiatan'])) {
-                                $p_val = $tugasData['ak_realisasi'] ?? $tugasData['ak'] ?? 1.00;
-                            }
-
-                            \App\Models\SkpTugasTambahan::create([
-                                'user_id' => $userId,
-                                'periode_skp_id' => $header->periode_skp_id,
-                                'jenis' => $tugasData['jenis'],
-                                'kegiatan' => $tugasData['kegiatan'],
-                                'ak' => $tugasData['ak'] ?? 1.00,
-                                'ak_realisasi' => $tugasData['ak_realisasi'] ?? 1.00,
-                                'realisasi_kegiatan' => $tugasData['realisasi_kegiatan'] ?? null,
-                                'penghitungan' => $p_val,
-                                'nilai_capaian' => $p_val
-                            ]);
+                foreach ($request->new_tugas as $tugasData) {
+                    if (!empty($tugasData['kegiatan'])) {
+                        $p_val = 0;
+                        if (!empty($tugasData['realisasi_kegiatan'])) {
+                            $p_val = $tugasData['ak_realisasi'] ?? $tugasData['ak'] ?? 1.00;
                         }
+
+                        \App\Models\SkpTugasTambahan::create([
+                            'user_id' => $userId,
+                            'periode_skp_id' => $header->periode_skp_id,
+                            'jenis' => $tugasData['jenis'],
+                            'kegiatan' => $tugasData['kegiatan'],
+                            'ak' => $tugasData['ak'] ?? 1.00,
+                            'ak_realisasi' => $tugasData['ak_realisasi'] ?? 1.00,
+                            'realisasi_kegiatan' => $tugasData['realisasi_kegiatan'] ?? null,
+                            'penghitungan' => $p_val,
+                            'nilai_capaian' => $p_val
+                        ]);
                     }
                 }
             }
 
             // 4. Simpan Perilaku Kerja (jika ada data perilaku di request)
             if ($request->has('perilaku')) {
-                $header = \App\Models\SkpHeader::where('user_id', $userId)->latest()->first();
-                if ($header) {
-                    \App\Models\SkpPerilakuIndicator::where('skp_header_id', $header->id)->delete();
-                    
-                    foreach ($request->perilaku as $aspek => $items) {
-                        $count = count($items);
-                        if ($count > 0) {
-                            $defaultBobot = 100 / $count;
-                            foreach ($items as $item) {
-                                $indikatorText = trim($item['indikator'] ?? '');
-                                if (empty($indikatorText) && ($item['nilai'] ?? 0) == 0) continue;
+                \App\Models\SkpPerilakuIndicator::where('skp_header_id', $header->id)->delete();
 
-                                \App\Models\SkpPerilakuIndicator::create([
-                                    'skp_header_id' => $header->id,
-                                    'aspek'         => $aspek,
-                                    'indikator'     => $indikatorText,
-                                    'nilai'         => $item['nilai'] ?? 0,
-                                    'bobot_persen'  => $item['bobot_persen'] ?? $defaultBobot,
-                                    'is_realized'   => false,
-                                    'is_from_admin' => filter_var($item['is_from_admin'] ?? 1, FILTER_VALIDATE_BOOLEAN) ? 1 : 0
-                                ]);
-                            }
+                foreach ($request->perilaku as $aspek => $items) {
+                    $count = count($items);
+                    if ($count > 0) {
+                        $defaultBobot = 100 / $count;
+                        foreach ($items as $item) {
+                            $indikatorText = trim($item['indikator'] ?? '');
+                            if (empty($indikatorText) && ($item['nilai'] ?? 0) == 0) continue;
+
+                            \App\Models\SkpPerilakuIndicator::create([
+                                'skp_header_id' => $header->id,
+                                'aspek'         => $aspek,
+                                'indikator'     => $indikatorText,
+                                'nilai'         => $item['nilai'] ?? 0,
+                                'bobot_persen'  => $item['bobot_persen'] ?? $defaultBobot,
+                                'is_realized'   => false,
+                                'is_from_admin' => filter_var($item['is_from_admin'] ?? 1, FILTER_VALIDATE_BOOLEAN) ? 1 : 0
+                            ]);
                         }
                     }
                 }

@@ -87,15 +87,7 @@
                                             <option value="">-- Pilih Periode --</option>
                                             @foreach($periode as $p)
                                                 <option value="{{ $p->id }}" {{ ($selPeriode->id ?? $periodeId) == $p->id ? 'selected' : '' }}>
-                                                    @if($p->tipe == 'tahunan')
-                                                        Tahun {{ $p->tahun }} : {{ $p->semester_genap }} / {{ $p->semester_gasal }}
-                                                    @elseif($p->tipe == 'semester')
-                                                        Tahun {{ $p->tahun }} : Semester {{ ucfirst($p->semester) }}
-                                                    @elseif($p->tipe == 'bulanan')
-                                                        Tahun {{ $p->tahun }} : Bulan {{ \Carbon\Carbon::create()->month($p->bulan)->translatedFormat('F') }}{{ $p->bulan_akhir ? ' — ' . \Carbon\Carbon::create()->month($p->bulan_akhir)->translatedFormat('F') : '' }}
-                                                    @else
-                                                        Tahun {{ $p->tahun }}
-                                                    @endif
+                                                    {{ $p->nama_periode }}
                                                     ({{ strtoupper($p->status) }})
                                                 </option>
                                             @endforeach
@@ -293,7 +285,7 @@
                                     <div class="flex-1 px-3 flex items-center justify-between text-blue-800 min-w-0">
                                         <span class="truncate text-xs">PEGAWAI YANG DINILAI</span>
                                         <span class="text-white bg-blue-600 px-2.5 py-1 rounded text-[10px] shadow-sm tracking-wider shrink-0 ml-2">
-                                            {{ $selPeriode->tahun ?? '-' }} - {{ $selPeriode->semester_genap ?? '-' }}
+                                            {{ $selPeriode?->nama_periode ?? '-' }}
                                         </span>
                                     </div>
                                 </div>

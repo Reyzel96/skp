@@ -142,15 +142,7 @@
                                                     @php $isNonSelectable = in_array(strtolower($p->status), ['draft', 'selesai']); @endphp
                                                     <option value="{{ $p->id }}" {{ $isNonSelectable ? 'disabled' : '' }}
                                                         class="{{ $isNonSelectable ? 'text-gray-400 bg-gray-100 italic' : '' }}">
-                                                        @if($p->tipe == 'tahunan')
-                                                            Tahun {{ $p->tahun }} : {{ $p->semester_genap }} / {{ $p->semester_gasal }}
-                                                        @elseif($p->tipe == 'semester')
-                                                            Tahun {{ $p->tahun }} : Semester {{ ucfirst($p->semester) }}
-                                                        @elseif($p->tipe == 'bulanan')
-                                                            Tahun {{ $p->tahun }} : Bulan {{ \Carbon\Carbon::create()->month($p->bulan)->translatedFormat('F') }}{{ $p->bulan_akhir ? ' — ' . \Carbon\Carbon::create()->month($p->bulan_akhir)->translatedFormat('F') : '' }}
-                                                        @else
-                                                            Tahun {{ $p->tahun }}
-                                                        @endif
+                                                        {{ $p->nama_periode }}
                                                         ({{ strtoupper($p->status) }})
                                                     </option>
                                                 @endforeach
@@ -454,6 +446,7 @@
                                                 <td colspan="3" class="align-top italic text-gray-800 relative group">
                                                     <input type="hidden" name="utama_rhk_pimpinan[]" :disabled="!showRow" value="">
                                                     <input type="hidden" name="utama_rhk[]" :disabled="!showRow" value="{{ $parent->sasaran_kinerja }}">
+                                                    <input type="hidden" name="utama_acuan_parent_id[]" :disabled="!showRow" value="{{ $parent->id }}">
                                                     {{ $parent->sasaran_kinerja }}
                                                     
                                                     @if($parent->kategori == 'jabatan')
@@ -475,7 +468,7 @@
                                                         placeholder="1. Tuliskan Ukuran keberhasilan/ Indikator Kinerja Individu" 
                                                         :disabled="!showRow"
                                                         @if($parent->kategori == 'jabatan')
-                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? ('Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya | Jabatan ' + pegawaiJabatan) : 'Melaksanakan tugas jabatan pimpinan perguruan tinggi swasta berdasarkan Izin Menduduki Jabatan dari Rektor Universitas Muhammadiyah surabaya'"
+                                                            :value="(pegawaiJabatan && pegawaiJabatan !== '......................' && pegawaiJabatan.toLowerCase() !== 'dosen') ? @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI) + @json(' | Jabatan ') + pegawaiJabatan : @json(\App\Support\SkpKualitatifJabatan::KALIMAT_RESMI)"
                                                         @endif
                                                         required>{{ $savedParent ? $savedParent->indikator_target : $defaultIndikator }}</textarea>
                                                 </td>

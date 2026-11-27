@@ -100,7 +100,7 @@
                             @endphp
 
                             <tr class="hover:bg-blue-50 transition-colors cursor-pointer"
-                                onclick="window.location='{{ route('superadmin.master-skp-tendik.show', $header->id) }}'">
+                                data-turbo-row="{{ route('superadmin.master-skp-tendik.show', $header->id) }}">
                                 <td class="text-center font-bold text-gray-400">{{ $loop->iteration }}</td>
                                 <td class="font-bold text-gray-900 uppercase">
                                     {{ $user->profile->nama_lengkap ?? ($user->name ?? '-') }}</td>

@@ -35,14 +35,7 @@
                                     </span>
                                 </td>
                                 <td class="border border-gray-300 p-3 font-bold text-gray-700">
-                                    @if($p->tipe == 'tahunan')
-                                        {{ $p->semester_genap }} / {{ $p->semester_gasal }}
-                                    @elseif($p->tipe == 'semester')
-                                        Semester {{ ucfirst($p->semester) }}
-                                    @elseif($p->tipe == 'bulanan')
-                                        Bulan {{ \Carbon\Carbon::create()->month($p->bulan)->translatedFormat('F') }}
-                                        @if($p->bulan_akhir) — {{ \Carbon\Carbon::create()->month($p->bulan_akhir)->translatedFormat('F') }} @endif
-                                    @endif
+                                    {{ $p->nama_periode }}
                                 </td>
                                 <td class="border border-gray-300 p-3">
                                     <div class="flex flex-col sm:flex-row gap-2 justify-center">

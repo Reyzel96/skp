@@ -15,7 +15,7 @@
             </div>
 
             <div class="flex-1 w-full">
-                <h2 class="text-2xl font-bold text-gray-800 mb-1">Selamat Datang, {{ $user->profile->nama_lengkap ?? $user->name }}</h2>
+                <h2 class="text-2xl font-bold text-gray-800 mb-1">{{ $user->profile->nama_lengkap ?? $user->name }}</h2>
                 <p class="text-blue-600 font-semibold mb-6">Kepala {{ $data['lab_name'] ?? 'Laboratorium' }}</p>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6">

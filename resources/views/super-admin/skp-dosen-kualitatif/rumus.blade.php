@@ -151,6 +151,7 @@
                         'X-CSRF-TOKEN': '{{ csrf_token() }}'
                     },
                     body: JSON.stringify({
+                        periode_id: @js($periodeAktif?->id),
                         distribusi_nilai: this.distribusiNilai,
                         distribusi_persen: this.distribusiPersen,
                         hasil_kerja: this.hasilKerja
@@ -177,7 +178,18 @@
                     <h1 class="text-2xl font-bold text-gray-800">Rumus Hasil SKP Dosen Kualitatif</h1>
                     <p class="text-sm text-gray-500 mt-1">Pola Distribusi Penilaian Kinerja</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center">
+                    <form method="GET" action="{{ route('superadmin.skp-dosen-kualitatif.rumus') }}" class="flex items-center gap-2">
+                        <select name="periode_id" onchange="this.form.submit()"
+                            class="text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            @foreach($periodeList as $p)
+                                <option value="{{ $p->id }}" {{ ($periodeAktif?->id ?? null) === $p->id ? 'selected' : '' }}>
+                                    {{ $p->nama_periode }} ({{ $p->status }})
+                                </option>
+                            @endforeach
+                        </select>
+                        <noscript><button type="submit" class="text-sm px-3 py-2 border rounded-lg">Tampilkan</button></noscript>
+                    </form>
                     <button type="button" @click="saveData()"
                         class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all">
                         <i class="fas fa-save mr-2"></i> Simpan Perubahan

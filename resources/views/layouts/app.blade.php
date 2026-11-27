@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{-- Penting: csrf-token diperlukan untuk AJAX/Fetch (Heartbeat) --}}
     <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    {{-- Data untuk script heartbeat/auto-logout di resources/js/app.js --}}
+    <meta name="session-lifetime" content="{{ config('session.lifetime') }}">
+    <meta name="route-keep-alive" content="{{ route('keep-alive') }}">
+    <meta name="route-login" content="{{ route('login') }}">
     <title>{{ config('app.name', 'Perfoma') }}</title>
 
     {{-- Favicon --}}
@@ -24,10 +29,13 @@
             to { transform: translateY(0); opacity: 1; }
         }
         .alert-animated { animation: slideInDown 0.4s ease-out forwards; }
+
+        /* Mencegah flicker (kedip) saat Alpine.js pertama kali load */
+        [x-cloak] { display: none !important; }
     </style>
 </head>
 
-<body class="font-sans antialiased text-gray-800 bg-gray-50" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+<body data-route="{{ Route::currentRouteName() }}" class="font-sans antialiased text-gray-800 bg-gray-50" x-data="{}">
     <style>
         @media print {
             @page {
@@ -69,9 +77,9 @@
                 page-break-inside: avoid;
             }
             #print-area table td, #print-area table th {
-                padding: 4px 6px !important;
-                font-size: 11px !important;
-                line-height: 1.3 !important;
+                padding: 5px 7px !important;
+                font-size: 12px !important;
+                line-height: 1.35 !important;
             }
             #print-area textarea {
                 min-height: 30px !important;
@@ -79,24 +87,17 @@
                 overflow: visible !important;
             }
 
-            /* Perbaikan kolom kosong & lebar tabel Perilaku Kerja saat print:
-               kolom "REALISASI & BUKTI DUKUNG" disembunyikan (.no-print),
-               sisa kolom diberi lebar tetap agar tidak ada ruang kosong
-               dan kolom UMPAN BALIK lebih lega (~32%). */
-            /* Perbaikan kolom kosong di tabel Perilaku Kerja saat print:
-               kolom "REALISASI & BUKTI DUKUNG" disembunyikan (.no-print),
-               jadi biarkan sisa kolom auto melebar mengisi 100% lebar tabel. */
+            /* Tabel Perilaku Kerja saat print: kolom "REALISASI PEGAWAI & BUKTI
+               DUKUNG" KINI IKUT DICETAK (td no-print dihapus dari show.blade.php),
+               jadi layout kolom biarkan auto mengikuti proporsi aslinya. */
             #print-area table.table-perilaku {
                 table-layout: auto !important;
             }
-            #print-area table.table-perilaku th,
-            #print-area table.table-perilaku td {
-                width: auto !important;
-            }
 
-            /* Perlebar khusus kolom UMPAN BALIK di tabel Perilaku Kerja saat print,
-               tanpa menyentuh kolom lain (untuk hindari blank column berulang). */
-            #print-area table.table-perilaku thead th:nth-child(3),
+            /* Perlebar khusus kolom UMPAN BALIK di tabel Perilaku Kerja saat print
+               (thead th ke-4 / tbody td ke-4 karena kolom realisasi sekarang tampil),
+               tanpa menyentuh kolom lain. */
+            #print-area table.table-perilaku thead th:nth-child(4),
             #print-area table.table-perilaku tbody td:nth-child(4) {
                 width: 30% !important;
             }
@@ -107,75 +108,53 @@
             }
         }
     </style>
-    <div class="min-h-screen flex overflow-hidden">
+    
+    <div class="min-h-screen flex">
 
         {{-- SIDEBAR KIRI - Modern & Responsive --}}
-        <aside class="bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col shrink-0 z-20 shadow-2xl transition-all duration-300 ease-in-out"
-            :class="sidebarOpen ? 'w-64' : 'w-20'">
+        @php $sbOpen = request()->cookie('sidebarOpen', 'true') !== 'false'; @endphp
+        
+        {{-- PERBAIKAN ANIMASI & ANTI-FLICKER: 
+             1. Class dasar HTML disamakan dengan state awal Alpine ({{ $sbOpen ? 'md:w-64' : 'md:w-0' }}) agar tidak muter-muter saat pindah menu.
+             2. Gunakan transition-all agar animasi width di desktop dan transform di mobile sama-sama jalan mulus. --}}
+        <aside id="sidebar" data-turbo-permanent 
+            class="bg-white border-r border-gray-100 shrink-0 z-50 shadow-xl w-64
+                   fixed inset-y-0 left-0 -translate-x-full overflow-y-auto overflow-x-hidden
+                   md:translate-x-0 md:sticky md:top-0 md:h-screen md:overflow-y-auto md:z-20
+                   transition-all duration-300 ease-in-out
+                   {{ $sbOpen ? 'md:w-64' : 'md:w-0' }}"
+            :class="{
+                'translate-x-0': $store.sidebar.mobileOpen,
+                'md:w-64': $store.sidebar.open,
+                'md:w-0': !$store.sidebar.open
+            }">
 
-            {{-- Logo Header --}}
-            <div class="p-4 text-center border-b border-white/10 overflow-hidden h-[81px] flex flex-col justify-center bg-slate-900/30">
-                <template x-if="sidebarOpen">
-                    <div x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-                        <h2 class="text-2xl font-black tracking-wider text-emerald-400 truncate">UMSURABAYA</h2>
-                        <p class="text-[10px] text-slate-400 mt-1 font-medium tracking-widest truncate">SISTEM SKP</p>
-                    </div>
-                </template>
-                <template x-if="!sidebarOpen">
-                    <div class="flex justify-center" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-                        <span class="text-3xl font-black text-emerald-400">U</span>
-                    </div>
-                </template>
-            </div>
-
-            {{-- Navigation Menu --}}
-            <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden" style="scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent;">
+            {{-- Wrapper tetap w-64 agar konten tidak pecah saat sidebar mengecil di desktop --}}
+            <div class="flex flex-col h-full w-64 min-h-0 overflow-hidden">
                 @yield('sidebar')
-            </nav>
-
-            {{-- Footer --}}
-            <div class="p-4 border-t border-white/10 text-xs text-slate-500 text-center bg-slate-900/30 overflow-hidden">
-                <template x-if="sidebarOpen">
-                    <p x-transition class="truncate">&copy; {{ date('Y') }} UMSURABAYA</p>
-                </template>
-                <template x-if="!sidebarOpen">
-                    <p x-transition>&copy;</p>
-                </template>
             </div>
         </aside>
 
+        {{-- Backdrop overlay (mobile only) --}}
+        <div :class="$store.sidebar.mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+             @click="$store.sidebar.closeMobile()"
+             class="fixed inset-0 bg-black/50 z-40 md:hidden print:hidden transition-opacity duration-300 ease-in-out"></div>
+
         {{-- KONTEN KANAN --}}
-        <div class="flex-1 flex flex-col h-screen overflow-hidden">
+        <div class="flex-1 flex flex-col min-h-screen">
 
             {{-- HEADER ATAS --}}
-            <header class="bg-white border-b border-gray-200 shrink-0 z-10 shadow-sm relative">
-                <div class="flex justify-between items-center px-6 py-4">
-                    <div class="flex items-center gap-4">
-                        <button @click="sidebarOpen = !sidebarOpen" class="text-gray-500 hover:text-blue-600 transition-colors p-2 rounded-lg hover:bg-blue-50 focus:outline-none">
-                            <i class="fas fa-bars-staggered text-lg" :class="sidebarOpen ? '' : 'rotate-180'"></i>
-                        </button>
-                        <h1 class="text-xl font-black text-gray-800 tracking-tight">
-                            @yield('page-title', 'Dashboard')
-                        </h1>
-                    </div>
-
-                    <div class="flex items-center space-x-6">
-                        <div class="text-right hidden sm:block">
-                            <div class="text-sm font-bold text-gray-800">{{ auth()->user()->profile->nama_lengkap ?? auth()->user()->name ?? 'Guest' }}</div>
-                            <div class="text-[10px] uppercase font-bold tracking-widest text-blue-600">{{ auth()->user()->getRoleNames()->first() ?? 'Staff' }}</div>
-                        </div>
-
-                        <div class="h-8 w-px bg-gray-200"></div>
-
-                        <form method="POST" action="{{ route('logout') }}" class="m-0" id="logout-form" onsubmit="return confirm('Apakah Anda yakin ingin keluar dari sistem?')">
-                            @csrf
-                            <button type="submit"
-                                class="text-gray-400 hover:text-red-600 transition-colors flex items-center justify-center p-2 rounded-lg hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200"
-                                title="Keluar / Logout">
-                                <i class="fas fa-power-off text-lg"></i>
-                            </button>
-                        </form>
-                    </div>
+            <header class="shrink-0 z-10 bg-white border-b border-gray-100">
+                <div class="flex items-center justify-between px-6 py-4">
+                    {{-- Tombol Hamburger: Cek lebar layar langsung saat diklik --}}
+                    <button @click="window.innerWidth < 768 ? $store.sidebar.toggleMobile() : $store.sidebar.toggle()"
+                            class="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-lg focus:outline-none z-50"
+                            title="Toggle Sidebar">
+                        <i class="fas fa-bars-staggered text-lg transition-transform duration-300 ease-in-out" :class="($store.sidebar.open || $store.sidebar.mobileOpen) ? 'rotate-180' : ''"></i>
+                    </button>
+                    <h1 class="text-xl font-bold text-gray-800 tracking-tight">
+                        @yield('page-title', 'Dashboard')
+                    </h1>
                 </div>
             </header>
 
@@ -231,68 +210,5 @@
     </div>
 
     @stack('scripts')
-
-    {{-- =========================================================================
-         🔴 SCRIPT AUTO-LOGOUT & HEARTBEAT (ANTI GHOST SESSION & MULTIPLE LOGIN)
-         ========================================================================= --}}
-    @auth
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                let heartbeatInterval;
-
-                // 1. HEARTBEAT LOGIC: Kirim sinyal setiap 60 detik (60.000ms)
-                const startHeartbeat = () => {
-                    heartbeatInterval = setInterval(function() {
-                        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                        if (!csrfToken) return;
-
-                        fetch("{{ route('keep-alive') }}", {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': csrfToken,
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json'
-                            }
-                        }).then(response => {
-                            if (response.status === 401 || response.status === 419) {
-                                window.location.href = "{{ route('login') }}";
-                            }
-                        }).catch(error => console.log('Heartbeat terputus atau jaringan offline'));
-                    }, 60000);
-                };
-
-                startHeartbeat();
-
-                // 2. AUTO LOGOUT LOGIC: Jika tidak ada pergerakan mouse/keyboard
-                let sessionLifetimeMs = {{ config('session.lifetime') * 60 * 1000 }};
-                let timeoutDuration = sessionLifetimeMs + 2000;
-                let sessionTimeout;
-
-                const startTimer = () => {
-                    sessionTimeout = setTimeout(function() {
-                        clearInterval(heartbeatInterval);
-                        const logoutForm = document.getElementById('logout-form');
-                        if (logoutForm) {
-                            logoutForm.submit();
-                        } else {
-                            window.location.href = "{{ route('login') }}";
-                        }
-                    }, timeoutDuration);
-                };
-
-                const resetTimer = () => {
-                    clearTimeout(sessionTimeout);
-                    startTimer();
-                };
-
-                document.addEventListener('click', resetTimer, { passive: true });
-                document.addEventListener('keypress', resetTimer, { passive: true });
-                document.addEventListener('mousemove', resetTimer, { passive: true });
-                document.addEventListener('scroll', resetTimer, { passive: true });
-
-                startTimer();
-            });
-        </script>
-    @endauth
 </body>
 </html>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\PeriodeSkp;
+use App\Models\Prodi;
 use App\Models\SkpDosen;
 use App\Models\SkpHeader;
 use App\Models\SkpTendik;
@@ -17,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule; // Pastikan Rule di-import
 use Carbon\Carbon;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+use App\Models\JenjangJabatan;
+use App\Models\PangkatGolongan;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\UsersImport;
 use App\Exports\UserTemplateExport;
@@ -25,6 +29,63 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class SuperAdminController extends Controller
 {
     // =========================================================================
+    // KONSTANTA ROLE & DASHBOARD (sumber tunggal untuk rolesIndex/Store/Update)
+    // Nama role bawaan dirujuk hardcode di sidebar, middleware role:, dan
+    // whereHas('roles') di banyak controller — maka rename/hapus dilindungi.
+    // =========================================================================
+
+    private const PRODI_BAWAAN = ['Arsitektur', 'Teknik Elektro', 'Teknik Mesin', 'Teknik Perkapalan', 'Teknik Sipil', 'Teknik Industri', 'Informatika'];
+
+    private const UPF_BAWAAN = ['Penelitian', 'Kemahasiswaan', 'Kerjasama', 'Humas', 'Laboratorium', 'Penjaminan Mutu'];
+
+    private const TENDIK_BAWAAN = ['Tata Usaha', 'Kesekretariatan', 'Kepegawaian', 'Sumber Daya Manusia', 'Kesekretariatan (Kerumahtanggaan)', 'IT', 'Kerumahtanggaan', 'Sarana dan Prasarana', 'Humas', 'Kerjasama dan Internasional', 'Front Office', 'Laboran', 'Administrasi Prodi', 'Admin Keuangan Fakultas'];
+
+    public const BASE_DASHBOARDS = [
+        'dekan.dashboard' => 'Dashboard Pimpinan (Dekan)',
+        'wakildekan.dashboard' => 'Dashboard Pimpinan (Wakil Dekan)',
+        'rektorat.dashboard' => 'Dashboard Pimpinan (Rektorat)',
+        'kaprodi.dashboard' => 'Dashboard Struktural Prodi (Kaprodi)',
+        'sekprodi.dashboard' => 'Dashboard Struktural Prodi (Sekprodi)',
+        'kepalalab.dashboard' => 'Dashboard Kepala Laboratorium',
+        'dosen.dashboard' => 'Dashboard Dosen',
+        'adminkeuanganfakultas.dashboard' => 'Dashboard Admin Keuangan',
+        'unitpenunjang.dashboard' => 'Dashboard Unit Penunjang',
+        'pegawai.dashboard' => 'Dashboard Pegawai / Tendik Umum'
+    ];
+
+    public const DASHBOARD_PERMISSIONS = [
+        'dekan.dashboard' => ['akses-dashboard-pimpinan'],
+        'wakildekan.dashboard' => ['akses-dashboard-pimpinan'],
+        'rektorat.dashboard' => ['akses-dashboard-pimpinan', 'akses-dashboard-rektorat'],
+        'kaprodi.dashboard' => ['akses-dashboard-prodi'],
+        'sekprodi.dashboard' => ['akses-dashboard-prodi'],
+        'kepalalab.dashboard' => ['akses-dashboard-lab'],
+        'dosen.dashboard' => ['akses-dashboard-dosen'],
+        'adminkeuanganfakultas.dashboard' => ['akses-dashboard-admin-keuangan'],
+        'unitpenunjang.dashboard' => ['akses-dashboard-upf'],
+        'pegawai.dashboard' => [],
+    ];
+
+    // Role 'Super Admin' dikunci penuh: editor di area ini pasti Super Admin
+    // sendiri, jadi mengubahnya = superadmin mencabut akses dirinya sendiri.
+    public const LOCKED_ROLE = 'Super Admin';
+
+    public static function builtInRoleNames(): array
+    {
+        $names = ['Super Admin', 'Dekan', 'Wadek 1', 'Wadek 2', 'Rektorat'];
+        foreach (self::PRODI_BAWAAN as $prodi) {
+            $names[] = "Kaprodi $prodi";
+            $names[] = "Sekprodi $prodi";
+            $names[] = "Kepala Lab $prodi";
+            $names[] = "Dosen $prodi";
+        }
+        foreach (self::UPF_BAWAAN as $upf) {
+            $names[] = "Kepala UPF $upf";
+        }
+        return array_merge($names, self::TENDIK_BAWAAN);
+    }
+
+    // =========================================================================
     // DASHBOARD
     // =========================================================================
 
@@ -32,9 +93,62 @@ class SuperAdminController extends Controller
     {
         $totalUsers = User::count();
         $totalPeriodeSkp = PeriodeSkp::count();
+        $totalProdi = Prodi::count();
+        $totalRole = Role::count();
+        $totalSkpDosen = SkpDosen::count();
+        $totalSkpTendik = SkpTendik::count();
+
+        // Breakdown status SKP
+        $skpStatuses = ['Draft', 'Diajukan', 'Pending Utama', 'Pending Akhir', 'Disetujui'];
+        $skpStatusCounts = [];
+        foreach ($skpStatuses as $status) {
+            $skpStatusCounts[$status] = SkpHeader::where('status', $status)->count();
+        }
+
+        // Distribusi user per role (top 10 berdasarkan jumlah user)
+        $rolesDist = Role::withCount('users')->orderByDesc('users_count')->limit(10)->get();
+
+        /*
+         * SPARKLINE / TREN HISTORIS
+         * ------------------------------------------------
+         * Saat ini HANYA "Total Users" yang diberi sparkline ($userTrend),
+         * karena tabel users punya created_at dengan variasi waktu nyata
+         * (user dibuat bertahap dari waktu ke waktu) sehingga tren kumulatif
+         * mingguan punya makna.
+         *
+         * 5 metrik berikut SENGAJA tidak diberi sparkline:
+         *   - Total Prodi      : dibuat serentak via seeder (created_at sama)
+         *   - Total Periode SKP: hanya 3 row, semua di awal Juli (data usang)
+         *   - Total Role        : dibuat serentak via seeder (created_at sama)
+         *   - Total SKP Dosen   : tabel masih kosong (count = 0)
+         *   - Total SKP Tendik  : tabel masih kosong (count = 0)
+         * Kelima metrik tersebut belum punya variasi data historis yang cukup,
+         * sehingga sparkline akan flat/kosong (tidak informatif).
+         *
+         * CATATAN PENGEMBANGAN KE DEPAN:
+         * Begitu data SKP Dosen / SKP Tendik (dan metrik lain) mulai terisi
+         * dari waktu ke waktu, sparkline serupa $userTrend bisa ditambahkan
+         * dengan pola query yang sama:
+         *   - hitung kumulatif mingguan via whereBetween('created_at', [...])
+         *     untuk N minggu terakhir, lalu masukkan ke compact() dan render
+         *     di canvas card terkait (lihat #sparkUsers di view).
+         * Tidak ada perubahan struktur diperlukan — cukup tambah variabel
+         * trend + canvas saat datanya sudah memadai.
+         */
+        // Sparkline Total Users: kumulatif mingguan 8 minggu terakhir (created_at asli)
+        $userTrend = [];
+        $cumulative = 0;
+        for ($i = 7; $i >= 0; $i--) {
+            $start = now()->subWeeks($i)->startOfWeek();
+            $end   = now()->subWeeks($i)->endOfWeek();
+            $cumulative += User::whereBetween('created_at', [$start, $end])->count();
+            $userTrend[] = $cumulative;
+        }
 
         return view('super-admin.dashboard', compact(
-            'totalUsers', 'totalPeriodeSkp',
+            'totalUsers', 'totalPeriodeSkp', 'totalProdi', 'totalRole',
+            'totalSkpDosen', 'totalSkpTendik',
+            'skpStatuses', 'skpStatusCounts', 'rolesDist', 'userTrend'
         ));
     }
 
@@ -44,7 +158,7 @@ class SuperAdminController extends Controller
 
     public function rolesIndex()
     {
-        $roles = Role::withCount('users')->get()->sortBy(function($role) {
+        $roles = Role::withCount('users')->with('permissions:id,name')->get()->sortBy(function($role) {
             $roleName = strtolower($role->name);
             if (str_contains($roleName, 'super admin')) return 0;
             if (str_contains($roleName, 'rektor')) return 1;
@@ -58,28 +172,23 @@ class SuperAdminController extends Controller
             return 99; // others
         })->values();
 
-        $baseDashboards = [
-            'dekan.dashboard' => 'Dashboard Pimpinan (Dekan)',
-            'wakildekan.dashboard' => 'Dashboard Pimpinan (Wakil Dekan)',
-            'rektorat.dashboard' => 'Dashboard Pimpinan (Rektorat)',
-            'kaprodi.dashboard' => 'Dashboard Struktural Prodi (Kaprodi)',
-            'sekprodi.dashboard' => 'Dashboard Struktural Prodi (Sekprodi)',
-            'kepalalab.dashboard' => 'Dashboard Kepala Laboratorium',
-            'dosen.dashboard' => 'Dashboard Dosen',
-            'adminkeuanganfakultas.dashboard' => 'Dashboard Admin Keuangan',
-            'unitpenunjang.dashboard' => 'Dashboard Unit Penunjang',
-            'pegawai.dashboard' => 'Dashboard Pegawai / Tendik Umum'
-        ];
+        $builtInRoles = self::builtInRoleNames();
+        $baseDashboards = self::BASE_DASHBOARDS;
+        // Peta permission per dashboard untuk ringkasan selisih di modal edit (client-side).
+        $dashboardPermissions = self::DASHBOARD_PERMISSIONS;
 
-        return view('super-admin.roles.index', compact('roles', 'baseDashboards'));
+        return view('super-admin.roles.index', compact('roles', 'builtInRoles', 'baseDashboards', 'dashboardPermissions'));
     }
 
     public function rolesStore(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|unique:roles,name',
+            'name' => 'required|string|max:100|unique:roles,name',
             'kategori' => 'required|in:utama,tendik',
-            'dashboard_route' => 'required|string'
+            'dashboard_route' => ['required', 'string', Rule::in(array_keys(self::BASE_DASHBOARDS))]
+        ], [
+            'dashboard_route.in' => 'Template dashboard tidak valid. Pilih salah satu dari daftar.',
+            'name.max' => 'Nama jabatan maksimal 100 karakter.'
         ]);
 
         $role = Role::create([
@@ -89,105 +198,97 @@ class SuperAdminController extends Controller
             'guard_name' => 'web'
         ]);
 
-        $permissionsToAssign = [];
-
-        switch ($request->dashboard_route) {
-            case 'dekan.dashboard':
-            case 'wakildekan.dashboard':
-            case 'rektorat.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-pimpinan';
-                if ($request->dashboard_route === 'rektorat.dashboard') {
-                    $permissionsToAssign[] = 'akses-dashboard-rektorat';
-                }
-                break;
-            case 'kaprodi.dashboard':
-            case 'sekprodi.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-prodi';
-                break;
-            case 'kepalalab.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-lab';
-                break;
-            case 'dosen.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-dosen';
-                break;
-            case 'adminkeuanganfakultas.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-admin-keuangan';
-                break;
-            case 'unitpenunjang.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-upf';
-                break;
-            case 'pegawai.dashboard':
-                break;
-        }
-
-        if (!empty($permissionsToAssign)) {
-            $role->syncPermissions($permissionsToAssign);
-        }
+        $this->syncDashboardPermissions($role, null, $request->dashboard_route);
 
         return back()->with('success', 'Jabatan / Role baru berhasil ditambahkan beserta hak akses dasarnya!');
     }
 
     public function rolesUpdate(Request $request, Role $role)
     {
+        // Role terkunci (Super Admin): eksekutor di area ini pasti Super Admin
+        // sendiri — mengubahnya berarti superadmin mencabut akses dirinya sendiri.
+        if ($role->name === self::LOCKED_ROLE) {
+            abort(403, 'Role Super Admin tidak boleh diubah.');
+        }
+
+        // Role bawaan sistem tidak boleh di-rename: nama dipakai hardcode di
+        // sidebar, middleware role:, dan whereHas('roles') di banyak controller.
+        if (in_array($role->name, self::builtInRoleNames(), true) && $request->name !== $role->name) {
+            return back()->withInput()->with('error', 'Gagal: Role bawaan sistem tidak boleh di-rename. Nama role dipakai untuk menu sidebar dan pemeriksaan hak akses di banyak modul.');
+        }
+
+        $allowedRoutes = array_keys(self::BASE_DASHBOARDS);
+        // Role non-bawaan boleh mempertahankan dashboard_route custom existing-nya.
+        if (!in_array($role->dashboard_route, $allowedRoutes, true) && !empty($role->dashboard_route)) {
+            $allowedRoutes[] = $role->dashboard_route;
+        }
+
         $request->validate([
-            'name' => ['required', 'string', Rule::unique('roles')->ignore($role->id)],
+            'name' => ['required', 'string', 'max:100', Rule::unique('roles')->ignore($role->id)],
             'kategori' => 'required|in:utama,tendik',
-            'dashboard_route' => 'required|string'
+            'dashboard_route' => ['required', 'string', Rule::in($allowedRoutes)]
+        ], [
+            'dashboard_route.in' => 'Template dashboard tidak valid. Pilih salah satu dari daftar.',
+            'name.max' => 'Nama jabatan maksimal 100 karakter.'
         ]);
 
+        $dashboardBerubah = $request->dashboard_route !== $role->dashboard_route;
+        // Tangkap nilai lama SEBELUM update — Model::update() menjalankan
+        // syncOriginal(), sehingga getOriginal() setelah update sudah bernilai baru.
+        $routeLama = $role->dashboard_route;
+
         $role->update([
-            'name' => $request->name,
+            'name' => $role->name === $request->name ? $role->name : $request->name,
             'kategori' => $request->kategori,
             'dashboard_route' => $request->dashboard_route,
         ]);
 
-        $permissionsToAssign = [];
-
-        switch ($request->dashboard_route) {
-            case 'dekan.dashboard':
-            case 'wakildekan.dashboard':
-            case 'rektorat.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-pimpinan';
-                if ($request->dashboard_route === 'rektorat.dashboard') {
-                    $permissionsToAssign[] = 'akses-dashboard-rektorat';
-                }
-                break;
-            case 'kaprodi.dashboard':
-            case 'sekprodi.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-prodi';
-                break;
-            case 'kepalalab.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-lab';
-                break;
-            case 'dosen.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-dosen';
-                break;
-            case 'adminkeuanganfakultas.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-admin-keuangan';
-                break;
-            case 'unitpenunjang.dashboard':
-                $permissionsToAssign[] = 'akses-dashboard-upf';
-                break;
-            case 'pegawai.dashboard':
-                break;
+        if ($dashboardBerubah) {
+            $this->syncDashboardPermissions($role, $routeLama, $request->dashboard_route);
         }
 
-        if (!empty($permissionsToAssign)) {
-            $role->syncPermissions($permissionsToAssign);
-        } else {
-            $role->syncPermissions([]);
-        }
+        // Update role (rename/ubah atribut) tidak memicu auto-flush cache Spatie.
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         return back()->with('success', 'Jabatan / Role berhasil diperbarui!');
     }
 
+    // Sinkronisasi permission role berbasis SELISIH dua peta dashboard, hanya
+    // dipanggil saat dashboard_route berubah.
+    // - Cabut permission yang ada di peta dashboard LAMA tapi tidak di peta BARU.
+    // - Tambahkan permission peta dashboard BARU.
+    // - Permission di luar kedua peta (mis. akses-manajemen-anggaran) TIDAK disentuh.
+    // - Peta kosong (pegawai.dashboard) = himpunan kosong biasa, tanpa pengecualian.
+    // - Tidak pernah memanggil syncPermissions([]) pada seluruh permission role.
+    private function syncDashboardPermissions(Role $role, ?string $routeLama, string $routeBaru): void
+    {
+        $petaLama = $routeLama === null ? [] : (self::DASHBOARD_PERMISSIONS[$routeLama] ?? []);
+        $petaBaru = self::DASHBOARD_PERMISSIONS[$routeBaru] ?? [];
+
+        $dicabut = array_diff($petaLama, $petaBaru);
+        $ditambah = array_diff($petaBaru, $petaLama);
+
+        if (!empty($dicabut)) {
+            $role->revokePermissionTo($dicabut);
+        }
+
+        if (!empty($ditambah)) {
+            $role->givePermissionTo($ditambah);
+        }
+    }
+
     public function rolesDestroy(Role $role)
     {
+        if (in_array($role->name, self::builtInRoleNames(), true)) {
+            return back()->with('error', 'Gagal: Role bawaan sistem tidak boleh dihapus karena dipakai untuk menu sidebar dan pemeriksaan hak akses di banyak modul.');
+        }
+
         if ($role->users()->count() > 0) {
             return back()->with('error', 'Gagal: Jabatan ini masih digunakan oleh ' . $role->users()->count() . ' pegawai.');
         }
 
         $role->delete();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         return back()->with('success', 'Jabatan / Role berhasil dihapus!');
     }
 
@@ -198,12 +299,25 @@ class SuperAdminController extends Controller
             'ids.*' => 'exists:roles,id'
         ]);
 
+        $builtIn = self::builtInRoleNames();
         $rolesInUse = 0;
+        $builtInSelected = 0;
         foreach ($request->ids as $id) {
             $role = Role::find($id);
-            if ($role && $role->users()->count() > 0) {
+            if (!$role) {
+                continue;
+            }
+            if (in_array($role->name, $builtIn, true)) {
+                $builtInSelected++;
+                continue;
+            }
+            if ($role->users()->count() > 0) {
                 $rolesInUse++;
             }
+        }
+
+        if ($builtInSelected > 0) {
+            return back()->with('error', 'Gagal: Ada ' . $builtInSelected . ' role bawaan sistem dalam pilihan Anda. Role bawaan tidak boleh dihapus.');
         }
 
         if ($rolesInUse > 0) {
@@ -211,6 +325,7 @@ class SuperAdminController extends Controller
         }
 
         Role::whereIn('id', $request->ids)->delete();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         return back()->with('success', count($request->ids) . ' Jabatan berhasil dihapus!');
     }
 
@@ -242,19 +357,21 @@ class SuperAdminController extends Controller
         $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
+        $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
 
-        return view('super-admin.users.create', compact('jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional'));
+        return view('super-admin.users.create', compact('jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans'));
     }
 
     public function usersEdit(User $user)
     {
-        $user->load('profile');
+        $user->load(['profile', 'profile.pangkatGolongan.jenjangJabatan']);
 
         $jabatanUtamaRoles = Role::where('kategori', 'utama')->get();
         $peranTendikRoles = Role::where('kategori', 'tendik')->get();
         $jabatanFungsional = ['Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Guru Besar / Profesor'];
+        $jenjangJabatans = JenjangJabatan::orderBy('urutan')->get();
 
-        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional'));
+        return view('super-admin.users.edit', compact('user', 'jabatanUtamaRoles', 'peranTendikRoles', 'jabatanFungsional', 'jenjangJabatans'));
     }
 
     public function usersStore(Request $request)
@@ -267,7 +384,8 @@ class SuperAdminController extends Controller
             'roles_tendik.*' => 'exists:roles,name',
             'nama' => 'required|string|max:255',
             'nip' => 'required|string|max:20|unique:user_profiles,nip',
-            'pangkat_golongan' => 'nullable|string|max:100',
+            'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
+            'pangkat_golongan'    => 'nullable|string|max:100',
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
@@ -291,11 +409,21 @@ class SuperAdminController extends Controller
 
             $jabatanPekerjaanText = $request->role_utama ?? (is_array($request->roles_tendik) ? implode(', ', $request->roles_tendik) : 'Tenaga Kependidikan');
 
+            $pangkatGolonganId = null;
+            $pangkatGolonganString = $request->pangkat_golongan;
+
+            if ($request->filled('pangkat_golongan_id') && $request->pangkat_golongan_id !== 'manual') {
+                $pg = PangkatGolongan::find($request->pangkat_golongan_id);
+                $pangkatGolonganId = $pg->id;
+                $pangkatGolonganString = $pg->kode_pangkat;
+            }
+
             UserProfile::create([
                 'user_id' => $user->id,
                 'nama_lengkap' => $request->nama,
                 'nip' => $request->nip,
-                'pangkat_golongan' => $request->pangkat_golongan,
+                'pangkat_golongan' => $pangkatGolonganString,
+                'pangkat_golongan_id' => $pangkatGolonganId,
                 'jabatan_pekerjaan' => $jabatanPekerjaanText,
                 'jabatan_fungsional' => $request->jabatan_fungsional,
                 'unit_kerja' => $request->unit_kerja,
@@ -327,7 +455,8 @@ class SuperAdminController extends Controller
             'roles_tendik.*' => 'exists:roles,name',
             'nama' => 'required|string|max:255',
             'nip' => ['required', 'string', 'max:20', Rule::unique('user_profiles')->ignore($user->profile->id ?? null)],
-            'pangkat_golongan' => 'nullable|string|max:100',
+            'pangkat_golongan_id' => 'nullable|exists:pangkat_golongans,id',
+            'pangkat_golongan'    => 'nullable|string|max:100',
             'jabatan_fungsional' => 'nullable|string|max:100',
             'unit_kerja' => 'nullable|string|max:100',
         ], [
@@ -349,12 +478,22 @@ class SuperAdminController extends Controller
 
             $jabatanPekerjaanText = $request->role_utama ?? (is_array($request->roles_tendik) ? implode(', ', $request->roles_tendik) : 'Tenaga Kependidikan');
 
+            $pangkatGolonganId = null;
+            $pangkatGolonganString = $request->pangkat_golongan;
+
+            if ($request->filled('pangkat_golongan_id') && $request->pangkat_golongan_id !== 'manual') {
+                $pg = PangkatGolongan::find($request->pangkat_golongan_id);
+                $pangkatGolonganId = $pg->id;
+                $pangkatGolonganString = $pg->kode_pangkat;
+            }
+
             UserProfile::updateOrCreate(
                 ['user_id' => $user->id],
                 [
                     'nama_lengkap' => $request->nama,
                     'nip' => $request->nip,
-                    'pangkat_golongan' => $request->pangkat_golongan,
+                    'pangkat_golongan' => $pangkatGolonganString,
+                    'pangkat_golongan_id' => $pangkatGolonganId,
                     'jabatan_pekerjaan' => $jabatanPekerjaanText,
                     'jabatan_fungsional' => $request->jabatan_fungsional,
                     'unit_kerja' => $request->unit_kerja,
@@ -383,7 +522,12 @@ class SuperAdminController extends Controller
             return back()->with('error', 'Tidak bisa menghapus akun Anda sendiri saat sedang login!');
         }
 
-        if (\Illuminate\Support\Facades\Cache::has('user-online-' . $user->id)) {
+        $isOnline = DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->where('last_activity', '>=', now()->getTimestamp() - 300)
+            ->exists();
+
+        if ($isOnline) {
             return back()->with('error', 'Gagal: Akun ini sedang online/aktif digunakan!');
         }
 
@@ -402,12 +546,11 @@ class SuperAdminController extends Controller
             return back()->with('error', 'Gagal: Anda memilih akun Anda sendiri untuk dihapus!');
         }
 
-        $onlineIds = [];
-        foreach ($request->ids as $id) {
-            if (\Illuminate\Support\Facades\Cache::has('user-online-' . $id)) {
-                $onlineIds[] = $id;
-            }
-        }
+        $onlineIds = DB::table('sessions')
+            ->whereIn('user_id', $request->ids)
+            ->where('last_activity', '>=', now()->getTimestamp() - 300)
+            ->distinct()
+            ->pluck('user_id');
 
         if (count($onlineIds) > 0) {
             return back()->with('error', 'Gagal: Ada ' . count($onlineIds) . ' akun yang sedang online/aktif digunakan dalam pilihan Anda!');
@@ -442,7 +585,8 @@ class SuperAdminController extends Controller
 
     public function skpTendikIndex(Request $request)
     {
-        $periodes = PeriodeSkp::orderBy('mulai', 'desc')->get();
+        // mulai desc lalu id desc → default aktif deterministik bila ada 2 aktif
+        $periodes = PeriodeSkp::orderBy('mulai', 'desc')->orderBy('id', 'desc')->get();
         $periodeAktif = $periodes->where('status', 'aktif')->first();
         $periodeId = $request->periode_id ?? $periodeAktif?->id;
 
@@ -467,7 +611,8 @@ class SuperAdminController extends Controller
     public function skpTendikCreate(Request $request)
     {
         // 1. Data Dasar untuk Modal Pemilihan
-        $periode = PeriodeSkp::orderBy('mulai', 'desc')->get();
+        // mulai desc lalu id desc → default aktif deterministik bila ada 2 aktif
+        $periode = PeriodeSkp::orderBy('mulai', 'desc')->orderBy('id', 'desc')->get();
         $periodeAktif = $periode->where('status', 'aktif')->first();
         $periodeId = $request->periode_id ?? $periodeAktif?->id;
 
@@ -874,7 +1019,7 @@ class SuperAdminController extends Controller
 
     public function skpDosenIndex(Request $request)
     {
-        $periode = PeriodeSkp::orderBy('tahun', 'desc')->get();
+        $periode = PeriodeSkp::orderBy('tahun', 'desc')->orderBy('mulai', 'desc')->orderBy('id', 'desc')->get();
         $periodeId = $request->periode_id ?? ($periode->where('status', 'aktif')->first()?->id);
 
         // Ambil Header SKP yang dimiliki oleh pegawai dengan role kategori 'utama' (Dosen/Struktural)
@@ -1003,10 +1148,19 @@ class SuperAdminController extends Controller
             'perilaku.*.indicators' => 'required|array|min:1',
         ]);
 
+        // Guard duplikat: satu pegawai hanya boleh punya satu header per periode
+        $duplikat = \App\Models\SkpHeader::where('periode_skp_id', $request->periode_skp_id)
+            ->where('user_id', $request->user_id)
+            ->exists();
+        if ($duplikat) {
+            return back()->withInput()->with('error', 'SKP untuk pegawai ini pada periode tersebut sudah ada. Silakan edit SKP yang sudah ada.');
+        }
+
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
 
                 // ✅ 1. SELALU BUAT HEADER BARU (Agar tidak merge jika periode sama)
+                // Unik per (periode, pegawai) — guard duplikat & constraint DB di atas.
                 $header = \App\Models\SkpHeader::create([
                     'user_id'                   => $request->user_id,
                     'periode_skp_id'            => $request->periode_skp_id,
@@ -1100,9 +1254,24 @@ class SuperAdminController extends Controller
                 }
             });
             return redirect()->route('superadmin.skp-dosen.index')->with('success', 'Target SKP Dosen & Perilaku berhasil disimpan!');
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Jaring pengaman race condition: constraint unik (periode_skp_id, user_id)
+            if ($this->adalahPelanggaranUnikHeader($e)) {
+                return back()->withInput()->with('error', 'SKP untuk pegawai ini pada periode tersebut sudah ada. Silakan edit SKP yang sudah ada.');
+            }
+            throw $e;
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal: ' . $e->getMessage())->withInput();
         }
+    }
+
+    /**
+     * Deteksi pelanggaran unique constraint skp_headers_periode_user_unique.
+     */
+    private function adalahPelanggaranUnikHeader(\Illuminate\Database\QueryException $e): bool
+    {
+        return str_contains($e->getMessage(), 'skp_headers_periode_user_unique')
+            || in_array((int) ($e->errorInfo[1] ?? 0), [1062, 19, 23505], true);
     }
 
     public function skpDosenEdit($id)
@@ -1468,6 +1637,7 @@ class SuperAdminController extends Controller
     public function periodeSkpStore(Request $request)
     {
         $this->terapkanDefaultTanggalBulanan($request);
+        $this->tambahBatasMaksimal($request);
 
         $validated = $request->validate([
             'tahun' => [
@@ -1480,23 +1650,18 @@ class SuperAdminController extends Controller
             ],
             'tipe' => 'required|in:tahunan,semester,bulanan',
             'semester' => 'required_if:tipe,semester|nullable|in:ganjil,genap',
-            'bulan' => 'required_if:tipe,bulanan|nullable|numeric|min:1|max:12',
-            'bulan_akhir' => 'nullable|numeric|min:1|max:12',
-            'semester_genap' => 'required_if:tipe,tahunan|nullable',
-            'semester_gasal' => 'required_if:tipe,tahunan|nullable',
+            'bulan' => 'required_if:tipe,bulanan|nullable|numeric|in:1,2,3,4',
+            'bulan_akhir' => 'nullable|numeric',
+            'semester_genap' => 'nullable',
+            'semester_gasal' => 'nullable',
             'mulai' => 'required|date',
             'selesai' => 'required|date|after:mulai',
-            'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
-            'batas_penilaian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
+            'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:batas_maksimal',
+            'batas_penilaian' => 'nullable|date|after_or_equal:batas_pengisian|before_or_equal:batas_maksimal',
+            'label_triwulan' => 'nullable|string|max:50',
+            'label_periode_penilaian' => 'nullable|string|max:100',
             'status' => 'required|in:draft,aktif,selesai'
-        ], [
-            'tahun.unique' => 'Periode SKP dengan Tahun dan rentang tanggal pelaksanaan tersebut sudah pernah dibuat sebelumnya.',
-            'selesai.after' => 'Tanggal selesai harus setelah tanggal mulai periode.',
-            'batas_pengisian.after_or_equal' => 'Batas akhir pengisian tidak boleh sebelum tanggal mulai periode.',
-            'batas_pengisian.before_or_equal' => 'Batas akhir pengisian tidak boleh melewati tanggal selesai periode.',
-            'batas_penilaian.after_or_equal' => 'Batas akhir penilaian tidak boleh sebelum tanggal mulai periode.',
-            'batas_penilaian.before_or_equal' => 'Batas akhir penilaian tidak boleh melewati tanggal selesai periode.',
-        ]);
+        ], $this->pesanValidasiPeriode($request));
 
         if ($conflict = $this->periodeBentrok($validated)) {
             return back()->withInput()->with('error', $conflict);
@@ -1505,7 +1670,7 @@ class SuperAdminController extends Controller
         DB::beginTransaction();
         try {
             if (($validated['status'] ?? null) === 'aktif') {
-                PeriodeSkp::where('status', 'aktif')->update(['status' => 'selesai']);
+                $this->tutupPeriodeLamaJikaSudahLewat($validated['tipe']);
             }
 
             PeriodeSkp::create($validated);
@@ -1526,6 +1691,7 @@ class SuperAdminController extends Controller
     public function periodeSkpUpdate(Request $request, PeriodeSkp $periodeSkp)
     {
         $this->terapkanDefaultTanggalBulanan($request);
+        $this->tambahBatasMaksimal($request);
 
         $validated = $request->validate([
             'tahun' => [
@@ -1538,23 +1704,24 @@ class SuperAdminController extends Controller
             ],
             'tipe' => 'required|in:tahunan,semester,bulanan',
             'semester' => 'required_if:tipe,semester|nullable|in:ganjil,genap',
-            'bulan' => 'required_if:tipe,bulanan|nullable|numeric|min:1|max:12',
-            'bulan_akhir' => 'nullable|numeric|min:1|max:12',
-            'semester_genap' => 'required_if:tipe,tahunan|nullable',
-            'semester_gasal' => 'required_if:tipe,tahunan|nullable',
+            'bulan' => 'required_if:tipe,bulanan|nullable|numeric|in:1,2,3,4',
+            'bulan_akhir' => 'nullable|numeric',
+            'semester_genap' => 'nullable',
+            'semester_gasal' => 'nullable',
             'mulai' => 'required|date',
             'selesai' => 'required|date|after:mulai',
-            'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
-            'batas_penilaian' => 'nullable|date|after_or_equal:mulai|before_or_equal:selesai',
+            'batas_pengisian' => 'nullable|date|after_or_equal:mulai|before_or_equal:batas_maksimal',
+            'batas_penilaian' => 'nullable|date|after_or_equal:batas_pengisian|before_or_equal:batas_maksimal',
+            'label_triwulan' => 'nullable|string|max:50',
+            'label_periode_penilaian' => 'nullable|string|max:100',
             'status' => 'required|in:draft,aktif,selesai'
-        ], [
-            'tahun.unique' => 'Gagal! Terdapat Periode SKP lain yang menggunakan Tahun dan rentang tanggal pelaksanaan yang persis sama.',
-            'selesai.after' => 'Tanggal selesai harus setelah tanggal mulai periode.',
-            'batas_pengisian.after_or_equal' => 'Batas akhir pengisian tidak boleh sebelum tanggal mulai periode.',
-            'batas_pengisian.before_or_equal' => 'Batas akhir pengisian tidak boleh melewati tanggal selesai periode.',
-            'batas_penilaian.after_or_equal' => 'Batas akhir penilaian tidak boleh sebelum tanggal mulai periode.',
-            'batas_penilaian.before_or_equal' => 'Batas akhir penilaian tidak boleh melewati tanggal selesai periode.',
-        ]);
+        ], $this->pesanValidasiPeriode());
+
+        // Guard: periode yang sudah dipakai data SKP tidak boleh ubah identitas
+        // (tipe/tahun/semester/bulan/tanggal), hanya batas waktu, status, dan label.
+        if ($pesan = $this->periodeTerpakai($validated, $periodeSkp)) {
+            return back()->withInput()->with('error', $pesan);
+        }
 
         if ($conflict = $this->periodeBentrok($validated, $periodeSkp->id)) {
             return back()->withInput()->with('error', $conflict);
@@ -1563,9 +1730,7 @@ class SuperAdminController extends Controller
         DB::beginTransaction();
         try {
             if (($validated['status'] ?? null) === 'aktif') {
-                PeriodeSkp::where('status', 'aktif')
-                    ->where('id', '!=', $periodeSkp->id)
-                    ->update(['status' => 'selesai']);
+                $this->tutupPeriodeLamaJikaSudahLewat($validated['tipe'], $periodeSkp->id);
             }
 
             $periodeSkp->update($validated);
@@ -1579,25 +1744,174 @@ class SuperAdminController extends Controller
 
     public function periodeSkpDestroy(PeriodeSkp $periodeSkp)
     {
+        $terpakai = array_filter($periodeSkp->jumlahDataTerkait(), fn ($jumlah) => $jumlah > 0);
+
+        if (!empty($terpakai)) {
+            $rincian = collect($terpakai)
+                ->map(fn ($jumlah, $jenis) => "{$jumlah} {$jenis}")
+                ->implode(' dan ');
+
+            return back()->with('error',
+                "Periode tidak bisa dihapus karena sudah dipakai {$rincian}. "
+                . "Ubah status menjadi Selesai untuk menutup periode."
+            );
+        }
+
         $periodeSkp->delete();
         return redirect()->route('superadmin.periode-skp.index')->with('success', 'Dihapus.');
+    }
+
+    // Field identitas periode yang terkunci saat periode sudah dipakai data SKP.
+    private function periodeTerpakai(array $validated, PeriodeSkp $periodeSkp): ?string
+    {
+        if (!$periodeSkp->adaDataTerkait()) {
+            return null;
+        }
+
+        // bulan/bulan_akhir hanya relevan (dan hanya dikirim form) untuk tipe bulanan;
+        // untuk semester/tahunan nilainya bisa legacy (mis. 1) dan tidak dikirim form,
+        // jadi tidak boleh ikut dibandingkan.
+        $kunci = ['tipe', 'tahun', 'semester', 'mulai', 'selesai'];
+        if ($periodeSkp->tipe === 'bulanan') {
+            $kunci[] = 'bulan';
+            $kunci[] = 'bulan_akhir';
+        }
+        $ubah = [];
+
+        foreach ($kunci as $field) {
+            $lama = $periodeSkp->$field;
+            $baru = $validated[$field] ?? null;
+
+            // "" dan null dianggap sama (kosong).
+            if (in_array($baru, [null, ''], true) && in_array($lama, [null, ''], true)) continue;
+
+            // Bandingkan tanggal secara string (format request = Y-m-d).
+            if (in_array($field, ['mulai', 'selesai']) && $lama && $baru) {
+                if (\Carbon\Carbon::parse($lama)->toDateString() !== \Carbon\Carbon::parse($baru)->toDateString()) {
+                    $ubah[] = $field;
+                }
+                continue;
+            }
+
+            // Angka (tahun, bulan) dibandingkan sebagai int.
+            if (is_numeric($lama) && is_numeric($baru)) {
+                if ((int) $lama !== (int) $baru) {
+                    $ubah[] = $field;
+                }
+                continue;
+            }
+
+            if ((string) $lama !== (string) $baru) {
+                $ubah[] = $field;
+            }
+        }
+
+        if (empty($ubah)) return null;
+
+        $terpakai = collect($periodeSkp->jumlahDataTerkait())->filter(fn ($n) => $n > 0);
+        $totalSkp = $terpakai->get('SKP', 0);
+
+        return 'Periode ini sudah dipakai ' . ($totalSkp > 0 ? "{$totalSkp} SKP" : 'data SKP')
+            . ', sehingga tipe, tahun, semester, bulan, dan tanggal periode tidak boleh diubah (terkirim berubah: '
+            . implode(', ', $ubah) . '). Ubah hanya batas waktu, status, atau label.';
     }
 
     // Default tanggal mulai=1 & selesai=akhir bulan HANYA untuk tipe 'bulanan',
     // dipakai sebagai fallback saat admin mengosongkan field (bisa di-override manual).
     private function terapkanDefaultTanggalBulanan(Request $request)
     {
-        if ($request->tipe !== 'bulanan') return;
-        if (!$request->tahun || !$request->bulan) return;
-
-        if (empty($request->mulai)) {
-            $request->merge(['mulai' => Carbon::create($request->tahun, $request->bulan, 1)->startOfMonth()->format('Y-m-d')]);
+        // Default rentang per tipe (isian otomatis, BUKAN aturan wajib —
+        // admin bebas mengubah tanggal ke nilai apa pun sesudahnya).
+        // Bulanan (triwulan): I 01-01 s.d. 03-31, II 04-01 s.d. 06-30,
+        //                     III 07-01 s.d. 09-30, IV 10-01 s.d. 12-31.
+        if ($request->tipe === 'bulanan') {
+            if (!$request->tahun || !$request->bulan) return;
+            $range = PeriodeSkp::rentangTriwulan((int) $request->bulan, (int) $request->tahun);
+            if (empty($request->mulai)) {
+                $request->merge(['mulai' => $range['mulai']]);
+            }
+            if (empty($request->selesai)) {
+                $request->merge(['selesai' => $range['selesai']]);
+            }
+            return;
         }
 
-        $bulanAkhir = $request->bulan_akhir ?: $request->bulan;
-        if (empty($request->selesai)) {
-            $request->merge(['selesai' => Carbon::create($request->tahun, $bulanAkhir, 1)->endOfMonth()->format('Y-m-d')]);
+        // Semester (kalender akademik, Tugas 17): Genap = 01-03 s.d. 31-08 tahun sama,
+        // Ganjil = 01-09 s.d. 28/29-02 TAHUN BERIKUTNYA (tahun periode = tahun mulai).
+        if ($request->tipe === 'semester') {
+            if (!$request->tahun || !$request->semester) return;
+            if ($request->semester === 'genap') {
+                if (empty($request->mulai)) {
+                    $request->merge(['mulai' => Carbon::create((int) $request->tahun, 3, 1)->toDateString()]);
+                }
+                if (empty($request->selesai)) {
+                    $request->merge(['selesai' => Carbon::create((int) $request->tahun, 8, 31)->toDateString()]);
+                }
+            } else {
+                if (empty($request->mulai)) {
+                    $request->merge(['mulai' => Carbon::create((int) $request->tahun, 9, 1)->toDateString()]);
+                }
+                if (empty($request->selesai)) {
+                    $request->merge(['selesai' => Carbon::create((int) $request->tahun + 1, 2, 1)->endOfMonth()->toDateString()]);
+                }
+            }
+            return;
         }
+
+        // Tahunan: 01-01 s.d. 12-31.
+        if ($request->tipe === 'tahunan' && $request->tahun) {
+            if (empty($request->mulai)) {
+                $request->merge(['mulai' => Carbon::create((int) $request->tahun, 1, 1)->toDateString()]);
+            }
+            if (empty($request->selesai)) {
+                $request->merge(['selesai' => Carbon::create((int) $request->tahun, 12, 31)->toDateString()]);
+            }
+        }
+    }
+
+    // Suntik field virtual 'batas_maksimal' = tanggal_selesai + N hari
+    // (config('periode.maks_hari_setelah_selesai'), sinkron dgn PeriodeSkp::MAKS_HARI_SETELAH_SELESAI)
+    // agar rule before_or_equal:batas_maksimal bisa dipakai validasi batas pengisian/penilaian.
+    private function tambahBatasMaksimal(Request $request): void
+    {
+        if ($request->filled('selesai')) {
+            $maksHari = (int) config('periode.maks_hari_setelah_selesai', PeriodeSkp::MAKS_HARI_SETELAH_SELESAI);
+            $request->merge([
+                'batas_maksimal' => Carbon::parse($request->selesai)->addDays($maksHari)->toDateString(),
+            ]);
+        }
+    }
+
+    // Pesan validasi Indonesia untuk form periode (dipakai store & update).
+    // Saat 'selesai' tidak terkirim (mis. field disabled tanpa hidden), pesan
+    // "maksimal 7 hari" jangan ditampilkan karena menyesatkan — cukup minta
+    // field selesai diisi ulang.
+    private function pesanValidasiPeriode(?Request $request = null): array
+    {
+        $pesan = [            'required' => ':attribute wajib diisi.',
+            'tahun.required' => 'Tahun acuan wajib diisi.',
+            'tipe.required' => 'Tipe periode wajib dipilih.',
+            'mulai.required' => 'Tanggal mulai wajib diisi.',
+            'selesai.required' => 'Tanggal selesai wajib diisi.',
+            'status.required' => 'Status periode wajib dipilih.',
+            'tahun.unique' => 'Gagal! Terdapat Periode SKP lain yang menggunakan Tahun dan rentang tanggal pelaksanaan yang persis sama.',
+            'semester.required' => 'Semester wajib dipilih.',
+            'bulan.required' => 'Triwulan wajib dipilih.',
+            'bulan.in' => 'Triwulan wajib dipilih salah satu dari: Triwulan I, II, III, atau IV.',
+            'selesai.after' => 'Tanggal selesai harus setelah tanggal mulai periode.',
+            'batas_pengisian.after_or_equal' => 'Batas akhir pengisian tidak boleh sebelum tanggal mulai periode.',
+            'batas_penilaian.after_or_equal' => 'Batas akhir penilaian tidak boleh sebelum batas akhir pengisian.',
+        ];
+
+        if ($request && $request->filled('selesai')) {
+            $pesan['batas_pengisian.before_or_equal'] = 'Batas akhir pengisian maksimal ' . PeriodeSkp::MAKS_HARI_SETELAH_SELESAI . ' hari setelah tanggal selesai periode.';
+            $pesan['batas_penilaian.before_or_equal'] = 'Batas akhir penilaian maksimal ' . PeriodeSkp::MAKS_HARI_SETELAH_SELESAI . ' hari setelah tanggal selesai periode.';
+        } else {
+            $pesan['batas_pengisian.before_or_equal'] = 'Tanggal selesai periode belum terkirim — isi tanggal mulai dan selesai terlebih dahulu, lalu simpan kembali.';
+            $pesan['batas_penilaian.before_or_equal'] = 'Tanggal selesai periode belum terkirim — isi tanggal mulai dan selesai terlebih dahulu, lalu simpan kembali.';
+        }
+
+        return $pesan;
     }
 
     // Cek overlap HANYA antar periode dengan tipe yang SAMA.
@@ -1618,6 +1932,28 @@ class SuperAdminController extends Controller
             . "Ubah rentang tanggal atau tipe periode agar tidak overlap.";
     }
 
+    // Tutup periode lama (setipe) yang jendela waktunya sudah benar-benar lewat,
+    // dipanggil saat periode baru setipe diaktifkan (store/update/update-status).
+    // Beda dengan perilaku lama yang menutup paksa SEMUA periode aktif setipe:
+    // periode yang masih punya jendela (mis. batas penilaian di masa depan) dibiarkan
+    // tetap aktif agar penilai tidak kehilangan jendela penilaian.
+    // Update dilakukan PER MODEL (bukan update massal query builder) supaya
+    // model event PeriodeSkp::updated jalan → DistribusiRiil::freeze terpicu.
+    private function tutupPeriodeLamaJikaSudahLewat(string $tipe, ?int $ignoreId = null): void
+    {
+        PeriodeSkp::where('status', 'aktif')
+            ->where('tipe', $tipe)
+            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+            ->get()
+            ->each(function (PeriodeSkp $lama) {
+                // Inklusif seperti periode:auto-close: hari batas sendiri belum lewat.
+                $batas = $lama->batasTutupTerakhir() ?? $lama->selesai;
+                if ($batas === null || !now()->gt($batas)) return;
+
+                $lama->update(['status' => 'selesai']);
+            });
+    }
+
     public function periodeSkpUpdateStatus(Request $request, PeriodeSkp $periodeSkp)
     {
         $request->validate(['status' => 'required|in:draft,aktif,selesai']);
@@ -1625,9 +1961,7 @@ class SuperAdminController extends Controller
         DB::beginTransaction();
         try {
             if ($request->status === 'aktif') {
-                PeriodeSkp::where('status', 'aktif')
-                    ->where('id', '!=', $periodeSkp->id)
-                    ->update(['status' => 'selesai']);
+                $this->tutupPeriodeLamaJikaSudahLewat($periodeSkp->tipe, $periodeSkp->id);
             }
 
             $periodeSkp->update(['status' => $request->status]);
@@ -1649,4 +1983,23 @@ class SuperAdminController extends Controller
         if (!file_exists($fullPath)) abort(404);
         return response()->file($fullPath);
     }
+
+    public function settingsIndex()
+    {
+        $showSkpDosenKuantitatif = \App\Models\SystemSetting::getBool('show_skp_dosen_kuantitatif', true);
+        return view('super-admin.settings.index', compact('showSkpDosenKuantitatif'));
+    }
+
+    public function toggleSetting(Request $request)
+    {
+        $validated = $request->validate([
+            'key' => 'required|in:show_skp_dosen_kuantitatif',
+        ]);
+
+        $current = \App\Models\SystemSetting::getBool($validated['key'], true);
+        \App\Models\SystemSetting::setBool($validated['key'], !$current);
+
+        return back()->with('success', 'Pengaturan berhasil diperbarui.');
+    }
 }
+

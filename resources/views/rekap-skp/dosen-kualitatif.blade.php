@@ -10,12 +10,7 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
                 <h1 class="text-3xl font-black text-gray-900 uppercase tracking-tighter">Rekap Nilai SKP Dosen (Kualitatif)</h1>
-                <p class="text-gray-500 text-sm font-medium">Periode: {{ $periode->tahun }} - 
-                    @if($periode->tipe == 'tahunan') {{ $periode->semester_genap }} / {{ $periode->semester_gasal }}
-                    @elseif($periode->tipe == 'semester') Semester {{ ucfirst($periode->semester) }}
-                    @elseif($periode->tipe == 'bulanan') Bulan {{ \Carbon\Carbon::create()->month($periode->bulan)->translatedFormat('F') }}
-                    @endif
-                </p>
+                <p class="text-gray-500 text-sm font-medium">Periode: {{ $periode->nama_periode }}</p>
             </div>
             <div class="flex gap-2">
                 <a href="{{ route('rekap-skp.index') }}" class="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition shadow-sm text-xs uppercase tracking-widest">
@@ -43,7 +38,7 @@
                     <tbody class="text-gray-900">
                         @forelse($rekap as $index => $item)
                             <tr class="hover:bg-indigo-50 transition-colors border-b border-gray-200 {{ $item['header'] ? 'cursor-pointer' : '' }}"
-                                @if($item['header']) onclick="window.location='{{ route('penilai.evaluasi.show', $item['header']->id) }}'" @endif
+                                @if($item['header']) data-turbo-row="{{ route('penilai.evaluasi.show', $item['header']->id) }}" @endif
                                 title="{{ $item['header'] ? 'Klik untuk melihat rincian pekerjaan' : 'Pegawai belum mengisi SKP' }}">
                                 <td class="border border-gray-300 p-3 text-center font-bold text-gray-400">{{ $index + 1 }}</td>
                                 <td class="border border-gray-300 p-3">

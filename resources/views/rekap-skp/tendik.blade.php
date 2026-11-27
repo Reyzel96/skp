@@ -19,12 +19,7 @@
                     </h1>
                     <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/60 backdrop-blur-sm border border-emerald-100 shadow-sm">
                         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <p class="text-emerald-800 text-sm font-bold tracking-wide">Periode: {{ $periode->tahun }} - 
-                            @if($periode->tipe == 'tahunan') {{ $periode->semester_genap }} / {{ $periode->semester_gasal }}
-                            @elseif($periode->tipe == 'semester') Semester {{ ucfirst($periode->semester) }}
-                            @elseif($periode->tipe == 'bulanan') Bulan {{ \Carbon\Carbon::create()->month($periode->bulan)->translatedFormat('F') }}
-                            @endif
-                        </p>
+                        <p class="text-emerald-800 text-sm font-bold tracking-wide">Periode: {{ $periode->nama_periode }}</p>
                     </div>
                 </div>
                 <div class="flex gap-3">
@@ -67,7 +62,7 @@
                         <tbody class="text-gray-800 divide-y divide-gray-100">
                             @forelse($rekap as $index => $item)
                                 <tr class="group hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent transition-all duration-300 {{ $item['header'] ? 'cursor-pointer' : '' }}"
-                                    @if($item['header']) onclick="window.location='{{ route('penilai.evaluasi.show', $item['header']->id) }}'" @endif
+                                    @if($item['header']) data-turbo-row="{{ route('penilai.evaluasi.show', $item['header']->id) }}" @endif
                                     title="{{ $item['header'] ? 'Klik untuk melihat rincian pekerjaan' : 'Pegawai belum mengisi SKP' }}">
                                     <td class="p-4 text-center font-black text-gray-300 group-hover:text-emerald-500 transition-colors">{{ $index + 1 }}</td>
                                     <td class="p-4">

@@ -90,6 +90,11 @@
                     <h3 class="text-xl font-black text-gray-800"><i class="fas fa-file-excel text-green-600 mr-2"></i>Import Daftar Tupoksi</h3>
                     <p class="text-xs text-gray-500 mt-1">Gunakan template baku Excel SKP Tendik.</p>
                 </div>
+                <div class="mb-4 text-center">
+                    <a href="{{ route('superadmin.daftar-tupoksi.template') }}" class="inline-flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline">
+                        <i class="fas fa-download"></i> Unduh Template Excel
+                    </a>
+                </div>
                 <div class="border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center transition-all duration-200 relative overflow-hidden group"
                     :class="isDragging ? 'drag-active' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-blue-400'"
                     @dragover.prevent="isDragging = true" @dragleave.prevent="isDragging = false"

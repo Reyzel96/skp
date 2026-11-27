@@ -83,7 +83,7 @@
                     <tbody class="text-sm">
                         @forelse($daftarTupoksi as $idx => $item)
                         <tr class="border-b border-gray-100 hover:bg-blue-50 transition cursor-pointer"
-                            onclick="window.location='{{ route('superadmin.daftar-tupoksi.show-detail', $item->bidang) }}'">
+                            data-turbo-row="{{ route('superadmin.daftar-tupoksi.show-detail', $item->bidang) }}">
                             <td class="p-4 text-center font-semibold text-gray-500">{{ $idx + 1 }}</td>
                             <td class="p-4 font-bold text-indigo-700 uppercase">
                                 {{ $item->bidang }}

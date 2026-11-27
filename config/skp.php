@@ -32,4 +32,11 @@ return [
         'Kurang/Misconduct' => 'KURANG',
         'Sangat Kurang' => 'SANGAT KURANG',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Minimal jumlah pegawai agar distribusi riil ditampilkan sebagai chart
+    |--------------------------------------------------------------------------
+    */
+    'distribusi_min_pegawai' => 5,
 ];

@@ -51,25 +51,18 @@
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col space-y-1">
-                                            @if($periode->tipe == 'tahunan')
-                                                <div class="flex items-center text-sm text-gray-700">
-                                                    <span class="w-2 h-2 bg-blue-400 rounded-full mr-2"></span>{{ $periode->semester_genap }}
-                                                </div>
-                                                <div class="flex items-center text-sm text-gray-700">
-                                                    <span class="w-2 h-2 bg-indigo-400 rounded-full mr-2"></span>{{ $periode->semester_gasal }}
-                                                </div>
-                                            @elseif($periode->tipe == 'semester')
-                                                <div class="flex items-center text-sm font-bold text-indigo-700 uppercase">
-                                                    Semester {{ ucfirst($periode->semester) }}
-                                                </div>
-                                            @elseif($periode->tipe == 'bulanan')
-                                                <div class="flex items-center text-sm font-bold text-teal-700 uppercase">
-                                                    Bulan {{ \Carbon\Carbon::create()->month($periode->bulan)->translatedFormat('F') }}
-                                                    @if($periode->bulan_akhir)
-                                                        — {{ \Carbon\Carbon::create()->month($periode->bulan_akhir)->translatedFormat('F') }}
-                                                    @endif
-                                                </div>
-                                            @endif
+                                            <div class="text-sm font-bold text-gray-800">
+                                                {{ $periode->nama_periode }}
+                                            </div>
+                                            <div>
+                                                @if($periode->tipe == 'tahunan')
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Tahunan</span>
+                                                @elseif($periode->tipe == 'semester')
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Semester</span>
+                                                @elseif($periode->tipe == 'bulanan')
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">Bulanan (Triwulan)</span>
+                                                @endif
+                                            </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -140,13 +133,20 @@
                                                     </path>
                                                 </svg>
                                             </a>
+                                            @php
+                                                $dataTerkait = $periode->jumlahDataTerkait();
+                                                $adaData = collect($dataTerkait)->contains(fn ($n) => $n > 0);
+                                                $ketHapus = collect($dataTerkait)->filter(fn ($n) => $n > 0)
+                                                    ->map(fn ($n, $j) => "{$n} {$j}")->implode(', ');
+                                            @endphp
                                             <form action="{{ route('superadmin.periode-skp.destroy', $periode->id) }}"
                                                 method="POST" class="inline">
                                                 @csrf @method('DELETE')
                                                 <button type="submit"
-                                                    class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    onclick="return confirm('Apakah Anda yakin ingin menghapus periode ini?')"
-                                                    title="Hapus Periode">
+                                                    class="p-2 rounded-lg transition-colors {{ $adaData ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50' }}"
+                                                    {{ $adaData ? 'disabled' : '' }}
+                                                    onclick="{{ $adaData ? 'return false;' : "return confirm('Apakah Anda yakin ingin menghapus periode ini?')" }}"
+                                                    title="{{ $adaData ? ('Tidak bisa dihapus: dipakai ' . $ketHapus) : 'Hapus Periode' }}">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor"
                                                         viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round"

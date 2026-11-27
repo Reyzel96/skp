@@ -147,7 +147,7 @@
                     <tbody class="bg-white divide-y divide-gray-200">
                         @forelse($kegiatanList as $kegiatan)
                         <tr class="hover:bg-blue-50/50 transition-colors cursor-pointer group {{ $loop->iteration % 2 == 0 ? 'bg-gray-50/50' : '' }}" 
-                            onclick="if(!event.target.closest('.no-click')) window.location='{{ route('program-kegiatan.show', $kegiatan->id) }}'">
+                            data-turbo-row="{{ route('program-kegiatan.show', $kegiatan->id) }}">
 
                             {{-- 0. Checkbox Massal --}}
                             @if(auth()->user()->hasAnyRole(['Admin Keuangan Fakultas']))

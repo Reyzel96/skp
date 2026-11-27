@@ -18,7 +18,7 @@
             {{-- Info Biodata --}}
             <div class="flex-1 w-full">
                 <div class="flex flex-col md:flex-row justify-between items-center md:items-start mb-1">
-                    <h2 class="text-2xl font-bold text-gray-800">Selamat Datang, {{ $user->profile->nama_lengkap ?? $user->name }}</h2>
+                    <h2 class="text-2xl font-bold text-gray-800">{{ $user->profile->nama_lengkap ?? $user->name }}</h2>
                 </div>
                 <p class="text-blue-600 font-semibold mb-6">Sekretaris Program Studi {{ $data['prodi_name'] ?? '-' }}</p>
 

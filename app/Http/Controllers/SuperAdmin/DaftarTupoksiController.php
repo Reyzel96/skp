@@ -72,10 +72,19 @@ class DaftarTupoksiController extends Controller
         $rawRoles = Role::whereIn('kategori', ['tendik', 'utama'])
             ->where('name', '!=', 'Super Admin')
             ->get();
-        
+
         $roles = $this->getConsolidatedRoles($rawRoles);
 
         return view('super-admin.daftar-tupoksi.create', compact('roles'));
+    }
+
+    public function downloadTemplate()
+    {
+        $path = public_path('templates/Template Import Daftar Tupoksi SKP.xlsx');
+
+        abort_unless(file_exists($path), 404, 'File template tidak ditemukan.');
+
+        return response()->download($path, 'Template_Import_Daftar_Tupoksi.xlsx');
     }
 
     private function getConsolidatedRoles($roles)
