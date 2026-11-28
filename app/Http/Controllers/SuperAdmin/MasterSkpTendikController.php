@@ -296,6 +296,10 @@ class MasterSkpTendikController extends Controller
         $header = \App\Models\SkpHeader::findOrFail($id);
         $user = $header->user;
 
+        // Status terkunci (Review Akhir/Selesai/Disetujui) tidak boleh ditimpa:
+        // update ini mereset approval + menghapus semua aktivitas/perilaku lama.
+        if ($resp = self::tolakBilaHeaderTerkunci($header)) return $resp;
+
         DB::beginTransaction();
         try {
             // ✅ 1. UPDATE HEADER SKP
@@ -611,7 +615,11 @@ class MasterSkpTendikController extends Controller
 
             // 3. Hapus Perilaku & Indikatornya spesifik header ini
             \App\Models\SkpPerilakuIndicator::where('skp_header_id', $header->id)->delete();
-            
+
+            // 4. Hapus tugas tambahan milik header ini (punya FK skp_header_id,
+            //    kalau tidak dihapus jadi row yatim)
+            \App\Models\SkpTugasTambahan::where('skp_header_id', $header->id)->delete();
+
             // Hapus headernya
             $header->delete();
 

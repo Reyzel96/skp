@@ -709,14 +709,16 @@ class SuperAdminController extends Controller
 
         \Illuminate\Support\Facades\DB::beginTransaction();
         try {
-            // ✅ CEK APAKAH STATUS SUDAH "Selesai" (Security Check)
-            $checkSelesai = \App\Models\SkpHeader::where('periode_skp_id', $request->periode_skp_id)
+            // ✅ CEK APAKAH STATUS SUDAH TERKUNCI (Security Check)
+            // 'Review Akhir' ikut diblokir: saat penilai sedang menilai, target
+            // tidak boleh ditimpa/ditambah (dulu hanya 'Selesai' yang diblokir).
+            $checkTerkunci = \App\Models\SkpHeader::where('periode_skp_id', $request->periode_skp_id)
                 ->where('user_id', $request->user_id)
-                ->where('status', 'Selesai')
+                ->whereIn('status', self::STATUS_HEADER_TERKUNCI)
                 ->exists();
 
-            if ($checkSelesai) {
-                throw new \Exception("SKP untuk pegawai ini pada periode tersebut sudah berstatus 'Selesai' (Final) dan tidak dapat dimodifikasi atau ditambah lagi.");
+            if ($checkTerkunci) {
+                throw new \Exception("SKP untuk pegawai ini pada periode tersebut berstatus '" . implode("'/'", self::STATUS_HEADER_TERKUNCI) . "' (sedang dinilai/final) dan tidak dapat dimodifikasi atau ditambah lagi.");
             }
 
             $user = User::find($request->user_id);
@@ -879,20 +881,24 @@ class SuperAdminController extends Controller
             'perilaku.*.indicators' => 'required|array|min:1',
         ]);
 
+        // ✅ CEK STATUS (Security Check) — 'Review Akhir' & 'Selesai' ikut
+        // diblokir, bukan hanya 'Disetujui': saat penilai sedang menilai,
+        // target tidak boleh ditimpa.
+        // Cek dilakukan SEBELUM transaksi dibuka supaya cabang tolak tidak
+        // menyisakan transaksi menggantung (beginTransaction tanpa commit/rollBack).
+        $header = \App\Models\SkpHeader::where('user_id', $user_id)
+            ->where('periode_skp_id', $request->periode_skp_id)
+            ->first();
+
+        if ($header && in_array($header->status, self::STATUS_HEADER_TERKUNCI)) {
+            return redirect()->route('superadmin.skp-tendik.index', ['periode_id' => $request->periode_skp_id])
+                             ->with('error', 'Gagal: Target SKP tidak dapat diperbarui karena berstatus "' . $header->status . '" (sedang dinilai/final).');
+        }
+
         \Illuminate\Support\Facades\DB::beginTransaction();
         try {
             $user = User::findOrFail($user_id);
             $roleName = $user->getRoleNames()->first() ?? 'Tendik';
-
-            // ✅ CEK STATUS (Security Check)
-            $header = \App\Models\SkpHeader::where('user_id', $user_id)
-                ->where('periode_skp_id', $request->periode_skp_id)
-                ->first();
-
-            if ($header && $header->status === 'Disetujui') {
-                return redirect()->route('superadmin.skp-tendik.index', ['periode_id' => $request->periode_skp_id])
-                                 ->with('error', 'Gagal: Target SKP tidak dapat diperbarui karena sudah disetujui.');
-            }
 
             \App\Models\SkpTendik::where('periode_skp_id', $request->periode_skp_id)
                 ->where('user_id', $user_id)
@@ -919,7 +925,14 @@ class SuperAdminController extends Controller
                 }
             }
 
-            $dekan = User::role('Dekan')->first();
+            // Cari Dekan secara defensif: bila role 'Dekan' belum ada di DB
+            // (spatie melempar exception utk role yang tidak dikenal), jangan
+            // gagalkan seluruh update target — penilai_akhir_id cukup NULL.
+            try {
+                $dekan = User::role('Dekan')->first();
+            } catch (\Spatie\Permission\Exceptions\RoleDoesNotExist $e) {
+                $dekan = null;
+            }
             $header = \App\Models\SkpHeader::updateOrCreate(
                 ['periode_skp_id' => $request->periode_skp_id, 'user_id' => $user_id],
                 [
@@ -1456,9 +1469,10 @@ class SuperAdminController extends Controller
 
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($request, $header, $user_id) {
-                // ✅ CEK STATUS (Security Check)
-                if ($header->status === 'Disetujui') {
-                    throw new \Exception('Gagal: Target SKP tidak dapat diperbarui karena sudah disetujui.');
+                // ✅ CEK STATUS (Security Check) — 'Review Akhir' & 'Selesai' ikut
+                // diblokir, bukan hanya 'Disetujui'.
+                if (in_array($header->status, self::STATUS_HEADER_TERKUNCI)) {
+                    throw new \Exception('Gagal: Target SKP tidak dapat diperbarui karena berstatus "' . $header->status . '" (sedang dinilai/final).');
                 }
 
                 $header->update([
