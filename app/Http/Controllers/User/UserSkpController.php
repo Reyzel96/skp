@@ -173,7 +173,11 @@ class UserSkpController extends Controller
     {
         $header = SkpHeader::findOrFail($header_id);
         if ($header->user_id !== Auth::id()) abort(403);
-        
+
+        // Status terkunci (Review Akhir/Selesai/Disetujui) tidak boleh
+        // difinalisasi ulang — dokumen sudah/sedang dinilai pimpinan.
+        if ($resp = self::tolakBilaHeaderTerkunci($header)) return $resp;
+
         $header->update(['status' => 'Target Diajukan']);
         
         return back()->with('success', 'Tupoksi & Target SKP telah difinalisasi dan diajukan ke pimpinan untuk disetujui.');
@@ -1008,6 +1012,12 @@ class UserSkpController extends Controller
 
             // 5. PENANGANAN FINALISASI (Optional)
             if ($request->has('do_finalisasi') && $request->do_finalisasi == 1) {
+                // Status terkunci tidak boleh difinalisasi ulang (rollback semua
+                // perubahan di transaksi ini agar tidak ada edit parsial terlanjur).
+                if (self::isHeaderTerkunci($header)) {
+                    DB::rollBack();
+                    return back()->with('error', 'SKP berstatus "' . $header->status . '" (sedang dinilai/final) dan tidak dapat difinalisasi ulang.');
+                }
                 $header->update(['status' => 'Target Diajukan']);
                 $msg = 'Perubahan berhasil disimpan dan target SKP telah difinalisasi!';
             } else {
@@ -2135,7 +2145,16 @@ class UserSkpController extends Controller
 
         $skp = SkpDosen::findOrFail($request->skp_id);
         $header = SkpHeader::where('periode_skp_id', $skp->periode_skp_id)->where('user_id', $skp->user_id)->first();
-        
+
+        // Header wajib ada: tanpa header tidak ada penilai/otoritas yang bisa
+        // diverifikasi — sebelumnya akses $header->pejabat_penilai_id fatal (null deref).
+        if (!$header) {
+            return back()->with('error', 'Header SKP untuk data ini tidak ditemukan. Hubungi Super Admin.');
+        }
+
+        // Status terkunci (Review Akhir/Selesai/Disetujui) tidak boleh diedit.
+        if ($resp = self::tolakBilaHeaderTerkunci($header)) return $resp;
+
         $authUser = Auth::user();
         $isOwner = ($skp->user_id == $authUser->id);
         
