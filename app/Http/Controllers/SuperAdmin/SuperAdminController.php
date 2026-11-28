@@ -1947,8 +1947,10 @@ class SuperAdminController extends Controller
             ->get()
             ->each(function (PeriodeSkp $lama) {
                 // Inklusif seperti periode:auto-close: hari batas sendiri belum lewat.
+                // startOfDay() wajib: batasTutupTerakhir() sudah startOfDay, tanpa ini
+                // now() jam 00:00:01 hari batas dianggap lewat (penutupan dini).
                 $batas = $lama->batasTutupTerakhir() ?? $lama->selesai;
-                if ($batas === null || !now()->gt($batas)) return;
+                if ($batas === null || !now()->startOfDay()->gt($batas->startOfDay())) return;
 
                 $lama->update(['status' => 'selesai']);
             });
