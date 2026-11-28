@@ -185,22 +185,28 @@ class LpjController extends Controller
             return back()->with('error', 'Tidak bisa menghapus LPJ dari program yang sudah ditutup/selesai');
         }
 
-        DB::beginTransaction();
-        try {
-            // LOGIKA BARU: Kembalikan saldo karena LPJ dibatalkan/dihapus oleh pengaju
-            $lpj->programKegiatanProdi->increment('sisa_anggaran', $lpj->nominal_penggunaan);
+        // LPJ ditolak sudah direfund saat diverifikasi ulang/ditolak (verify()).
+        // Refund lagi di sini = saldo fiktif naik 2x nominal.
+        if ($lpj->status_verifikasi !== 'diverifikasi') {
+            return back()->with('error', 'LPJ berstatus "' . $lpj->getStatusLabel() . '" tidak dapat dihapus. Hanya LPJ valid yang bisa dihapus beserta refund saldonya.');
+        }
+
+        DB::transaction(function () use ($lpj) {
+            // Lock row pengajuan agar refund tidak balapan dengan verify()/store() lain.
+            $pengajuan = ProgramKegiatanProdi::whereKey($lpj->program_kegiatan_prodi_id)
+                ->lockForUpdate()
+                ->first();
+
+            // Refund saldo karena LPJ valid dibatalkan/dihapus oleh pengaju.
+            $pengajuan->increment('sisa_anggaran', $lpj->nominal_penggunaan);
 
             if ($lpj->bukti_pengeluaran && Storage::disk('public')->exists($lpj->bukti_pengeluaran)) {
                 Storage::disk('public')->delete($lpj->bukti_pengeluaran);
             }
             $lpj->delete();
+        });
 
-            DB::commit();
-            return redirect()->back()->with('success', 'LPJ berhasil dihapus dan saldo telah dikembalikan.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Gagal menghapus LPJ: ' . $e->getMessage());
-        }
+        return redirect()->back()->with('success', 'LPJ berhasil dihapus dan saldo telah dikembalikan.');
     }
 
     // LOGIKA BARU: Fungsi untuk menutup program jika anggaran sudah Rp 0
