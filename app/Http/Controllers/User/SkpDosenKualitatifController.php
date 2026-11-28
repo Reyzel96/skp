@@ -244,7 +244,32 @@ class SkpDosenKualitatifController extends Controller
         $request->validate([
             'realisasi' => 'nullable|array',
             'bukti_dukung' => 'nullable|array',
+            // Validasi tipe file bukti dukung: array bersarang tak tentu bentuknya
+            // (utama[{child}], tambahan[{id}][], perilaku[{child}]), jadi tiap file
+            // divalidasi manual via validator bawah, bukan rule wildcard di sini.
+            'bukti_dukung.*' => 'nullable|array',
         ]);
+
+        // Validasi setiap file bukti dukung (mime + ekstensi) — mencegah upload
+        // file berbahaya (.php dll) ke folder public yang web-accessible.
+        if ($request->hasFile('bukti_dukung')) {
+            $fileRules = ['file', 'max:5120', 'mimes:pdf,xls,xlsx,doc,docx,rtf,txt,jpg,jpeg,png'];
+            foreach (['utama', 'tambahan', 'perilaku'] as $section) {
+                $files = $request->file("bukti_dukung.$section");
+                if (!$files) continue;
+                array_walk_recursive($files, function ($file) use ($fileRules, $section) {
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
+                        $validator = \Illuminate\Support\Facades\Validator::make(
+                            ['file' => $file],
+                            ['file' => $fileRules]
+                        );
+                        if ($validator->fails()) {
+                            abort(422, "File bukti dukung ($section) tidak valid: " . $validator->errors()->first('file'));
+                        }
+                    }
+                });
+            }
+        }
 
         $header = \App\Models\SkpHeader::find($id);
 
@@ -338,7 +363,7 @@ class SkpDosenKualitatifController extends Controller
                     $model->label_realisasi = ($label0 === '') ? null : $label0;
 
                     if ($file) {
-                        $filename = time() . '_uc' . $childId . '_' . $file->getClientOriginalName();
+                        $filename = time() . '_uc' . $childId . '_' . preg_replace('/[^\w.\-]+/', '_', $file->getClientOriginalName());
                         $file->move(public_path('uploads/skp_realisasi'), $filename);
                         $model->bukti_dukung_nama = $file->getClientOriginalName();
                         $model->bukti_dukung_url = 'uploads/skp_realisasi/' . $filename;
@@ -359,7 +384,7 @@ class SkpDosenKualitatifController extends Controller
                         
                         if (isset($buktiDukungData['tambahan'][$tambahanId][$index])) {
                             $file = $buktiDukungData['tambahan'][$tambahanId][$index];
-                            $filename = time() . '_t' . $tambahanId . '_' . $index . '_' . $file->getClientOriginalName();
+                            $filename = time() . '_t' . $tambahanId . '_' . $index . '_' . preg_replace('/[^\w.\-]+/', '_', $file->getClientOriginalName());
                             $file->move(public_path('uploads/skp_realisasi'), $filename);
                             $model->bukti_dukung_nama = $file->getClientOriginalName();
                             $model->bukti_dukung_url = 'uploads/skp_realisasi/' . $filename;
@@ -412,7 +437,7 @@ class SkpDosenKualitatifController extends Controller
                     $model->label_realisasi = ($label0 === '') ? null : $label0;
 
                     if ($file) {
-                        $filename = time() . '_pc' . $childId . '_' . $file->getClientOriginalName();
+                        $filename = time() . '_pc' . $childId . '_' . preg_replace('/[^\w.\-]+/', '_', $file->getClientOriginalName());
                         $file->move(public_path('uploads/skp_realisasi'), $filename);
                         $model->bukti_dukung_nama = $file->getClientOriginalName();
                         $model->bukti_dukung_url = 'uploads/skp_realisasi/' . $filename;

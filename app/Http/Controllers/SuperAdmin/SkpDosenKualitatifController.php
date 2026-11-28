@@ -214,8 +214,14 @@ class SkpDosenKualitatifController extends Controller
 
     public function applySync(Request $request, $header_id)
     {
-        // Guard: SKP final tidak boleh diubah strukturnya
-        $status = strtolower(\App\Models\SkpHeader::find($header_id)->status ?? '');
+        // Guard: SKP final tidak boleh diubah strukturnya.
+        // find() bisa null bila header sudah terhapus — perlakukan sebagai
+        // tidak-final-akses-gagal alih-alih fatal "property on null".
+        $headerModel = \App\Models\SkpHeader::find($header_id);
+        if (!$headerModel) {
+            return response()->json(['success' => false, 'message' => 'Header SKP tidak ditemukan.'], 404);
+        }
+        $status = strtolower($headerModel->status ?? '');
         if (in_array($status, ['review akhir', 'selesai'])) {
             return response()->json(['success' => false, 'message' => 'SKP sudah final (status: ' . $status . ') — struktur kotak upload tidak boleh diubah lagi.'], 422);
         }
@@ -558,14 +564,15 @@ class SkpDosenKualitatifController extends Controller
             : ['indikator_kinerja', 'definisi_operasional', 'bukti_utama', 'target_ekspektasi', 'acuan', 'butuh_lampiran', 'label_lampiran'];
 
         if (! in_array($field, $allowedFields, true)) {
-            // Mode log dulu: update tetap diizinkan, hanya mencatat kemungkinan
-            // field yang belum tercakup whitelist di sisi UI.
-            Log::warning('updateAcuan: field di luar whitelist tetap diupdate', [
+            // Hard-block: field di luar whitelist DITOLAK (422) — sebelumnya
+            // hanya Log::warning lalu tetap diupdate (mass-assignment bebas
+            // nama kolom apa pun pada model acuan).
+            Log::warning('updateAcuan: field di luar whitelist DITOLAK', [
                 'type' => $type,
                 'id' => $id,
                 'field' => $field,
-                'value' => $value,
             ]);
+            return response()->json(['success' => false, 'message' => 'Field tidak diizinkan'], 422);
         } elseif ($field === 'label_lampiran' && is_string($value) && mb_strlen($value) > 255) {
             return response()->json(['success' => false, 'message' => 'Nama lampiran maksimal 255 karakter'], 422);
         }
@@ -662,7 +669,10 @@ class SkpDosenKualitatifController extends Controller
             ? \Illuminate\Support\Facades\Cache::get($keyNilai)
                 ?? \Illuminate\Support\Facades\Cache::get('distribusi_nilai_skp', $defaultDistribusiNilai)
             : $defaultDistribusiNilai;
-        \Illuminate\Support\Facades\Cache::rememberForever($keyNilai, fn () => $distribusiNilai);
+        // rememberForever(null) → TypeError; hanya cache bila periode memang ada.
+        if ($keyNilai) {
+            \Illuminate\Support\Facades\Cache::rememberForever($keyNilai, fn () => $distribusiNilai);
+        }
 
         $distribusiPersen = $periodeId
             ? \Illuminate\Support\Facades\Cache::get($keyPersen)

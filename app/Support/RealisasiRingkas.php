@@ -93,10 +93,10 @@ class RealisasiRingkas
             // (≥4 kata), fallback: setelah baris identitas terakhir.
             for ($i = $lastHeader + 1; $i < count($lines); $i++) {
                 $p = trim($lines[$i]);
-                if ($p === '' || $this->terlihatMetadata($p)) {
+                if ($p === '' || self::terlihatMetadata($p)) {
                     continue;
                 }
-                if ($this->hitungKata($p) >= 4) {
+                if (self::hitungKata($p) >= 4) {
                     return $p;
                 }
             }

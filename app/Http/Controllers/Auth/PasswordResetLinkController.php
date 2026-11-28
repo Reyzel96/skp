@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
@@ -68,13 +69,26 @@ class PasswordResetLinkController extends Controller
             'otp' => 'required|numeric',
         ]);
 
+        // Anti brute-force: OTP 6 digit hanya punya 1 juta kombinasi dan
+        // berlaku 5 menit — tanpa limit, bisa dipaksakan dalam 5 menit.
+        // Maks 5 percobaan per email+IP; melebihi → tunggu (decay 5 menit).
+        $throttleKey = 'otp-verify:' . strtolower($request->email) . '|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $detik = RateLimiter::availableIn($throttleKey);
+            return back()->withErrors(['otp' => "Terlalu banyak percobaan. Coba lagi dalam {$detik} detik."]);
+        }
+        RateLimiter::hit($throttleKey, 300);
+
         $cachedOtp = Cache::get('password_otp_' . $request->email);
 
-        if (!$cachedOtp || $cachedOtp != $request->otp) {
+        if (!$cachedOtp || !hash_equals((string) $cachedOtp, (string) $request->otp)) {
             return back()->withErrors(['otp' => 'Kode OTP salah atau telah kadaluarsa.']);
         }
 
-        // OTP Valid, simpan penanda di session bahwa user ini sudah verifikasi OTP
+        // OTP Valid: bersihkan penghitung percobaan
+        RateLimiter::clear($throttleKey);
+
+        // Simpan penanda di session bahwa user ini sudah verifikasi OTP
         session(['otp_verified_email' => $request->email]);
         
         // Hapus OTP dari cache setelah berhasil verifikasi
@@ -91,6 +105,14 @@ class PasswordResetLinkController extends Controller
         $request->validate([
             'email' => 'required|email|exists:users,email',
         ]);
+
+        // Anti spam email: maks 3 kirim OTP per 10 menit per email+IP.
+        $throttleKey = 'otp-resend:' . strtolower($request->email) . '|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            $detik = RateLimiter::availableIn($throttleKey);
+            return back()->withErrors(['email' => "Terlalu banyak permintaan kode. Coba lagi dalam {$detik} detik."]);
+        }
+        RateLimiter::hit($throttleKey, 600);
 
         $email = $request->email;
         $otp = rand(100000, 999999);

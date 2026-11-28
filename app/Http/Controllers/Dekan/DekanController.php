@@ -283,6 +283,25 @@ class DekanController extends Controller
         $header = SkpHeader::where('id', $id)->firstOrFail();
         $target_user_id = $header->user_id;
 
+        // Keamanan: hanya pejabat penilai yang tercatat di header (pejabat/atasan/
+        // penilai utama/penilai akhir) ATAU penilai per-kegiatan (role cocok dengan
+        // penilai_role pada aktivitas target user) yang boleh mengubah/menyetujui.
+        // Tanpa guard ini, Dekan/Kaprodi/penilai lain mana pun bisa memodifikasi
+        // header orang lain hanya dengan tahu ID-nya (pola sama dengan showSkp()).
+        $myRoles = $user->getRoleNames()->toArray();
+        $isRecordedEvaluator = in_array($user->id, array_filter([
+            $header->pejabat_penilai_id,
+            $header->atasan_pejabat_penilai_id,
+            $header->penilai_utama_id,
+            $header->penilai_akhir_id,
+        ]));
+        $isActivityEvaluator = \App\Models\MasterSkpTendik::where('user_id', $target_user_id)
+            ->whereIn('penilai_role', $myRoles)
+            ->exists();
+        if (!$isRecordedEvaluator && !$isActivityEvaluator) {
+            abort(403, 'Anda tidak memiliki otoritas atas SKP ini.');
+        }
+
         // Guard penilaian: blokir submit NILAI lewat batas_penilaian.
         // Kecuali sub-handler approval tupoksi (fase rencana, pakai batas_pengisian).
         $isTupoksiAction = $request->hasAny(['approve_tupoksi', 'reject_tupoksi', 'approve_all_tupoksi', 'reject_all_tupoksi']);
@@ -329,6 +348,7 @@ class DekanController extends Controller
             // --- HANDLER UNTUK BATCH APPROVAL SELURUH TUPOKSI (Level 1 & 2) ---
             if ($request->has('approve_all_tupoksi')) {
                 \App\Models\MasterSkpTendik::where('user_id', $target_user_id)
+                    ->where('skp_header_id', $header->id)
                     ->where('status_approval', '!=', 'approved')
                     ->update([
                         'status_approval' => 'approved',
@@ -348,8 +368,11 @@ class DekanController extends Controller
                     ->delete();
 
                 // 2. Hapus dari Tabel 2 (Tugas Tambahan) yang tersinkron
+                //    (scoped ke header ini — tanpa skp_header_id bisa menghapus
+                //    tugas tambahan milik header LAIN di periode yang sama)
                 \App\Models\SkpTugasTambahan::where('user_id', $target_user_id)
                     ->where('periode_skp_id', $header->periode_skp_id)
+                    ->where('skp_header_id', $header->id)
                     ->delete();
                 
                 \Illuminate\Support\Facades\DB::commit();
@@ -499,8 +522,6 @@ class DekanController extends Controller
                         $msg = 'SKP berhasil disetujui secara Final.';
                     } else {
                         // Update status ke Pending Akhir (untuk Atasan) jika saat ini masih di draf/utama
-                        $newStatus = ($header->status === 'Pending Akhir') ? 'Pending Akhir' : 'Pending Akhir';
-                        
                         $header->update([
                             'status' => 'Pending Akhir',
                             'catatan_penilai' => $request->catatan,

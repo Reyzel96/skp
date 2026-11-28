@@ -981,12 +981,23 @@ class UserSkpController extends Controller
 
                     // Handle File Upload Bukti
                     if ($request->hasFile("tugas_tambahan_realisasi.{$tambahan_id}.bukti")) {
+                        $file = $request->file("tugas_tambahan_realisasi.{$tambahan_id}.bukti");
+                        // Validasi tipe file — cegah upload file berbahaya (.php dll)
+                        // ke disk public yang web-accessible via /storage.
+                        $validator = \Illuminate\Support\Facades\Validator::make(
+                            ['bukti' => $file],
+                            ['bukti' => ['file', 'max:5120', 'mimes:pdf,xls,xlsx,doc,docx,rtf,txt,jpg,jpeg,png']]
+                        );
+                        if ($validator->fails()) {
+                            return redirect()->back()
+                                ->with('error', 'File bukti tugas tambahan tidak valid: ' . $validator->errors()->first('bukti'))
+                                ->withInput();
+                        }
                         // Hapus file lama jika ada
                         if ($tambahan->realisasi_bukti && \Illuminate\Support\Facades\Storage::disk('public')->exists($tambahan->realisasi_bukti)) {
                             \Illuminate\Support\Facades\Storage::disk('public')->delete($tambahan->realisasi_bukti);
                         }
-                        
-                        $file = $request->file("tugas_tambahan_realisasi.{$tambahan_id}.bukti");
+
                         $path = $file->store('bukti_tugas_tambahan', 'public');
                         $updateData['realisasi_bukti'] = $path;
                     }
@@ -1292,11 +1303,14 @@ class UserSkpController extends Controller
     // DETAIL DOSEN
     // ==========================================
     public function detailPerkuliahan($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        $targetSkp = SkpDosen::findOrFail($skp_id);
+        if ($targetSkp->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
+
         $penilaian = PenilaianSkpDosen::firstOrCreate(
             ['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id],
             ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]
         );
-        $targetSkp = SkpDosen::findOrFail($skp_id);
         $daftarMatkul = SkpDosenPerkuliahan::where('penilaian_skp_dosen_id', $penilaian->id)->orderBy('semester', 'asc')->get();
 
         $header = SkpHeader::where('periode_skp_id', $targetSkp->periode_skp_id)->where('user_id', Auth::id())->first();
@@ -1307,6 +1321,8 @@ class UserSkpController extends Controller
 
     public function storePerkuliahan(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1328,6 +1344,19 @@ class UserSkpController extends Controller
         try {
             foreach ($request->items as $key => $item) {
                 $total_sks_riel = ($item['sks_mata_kuliah'] * $item['jumlah_kelas']) / $item['jumlah_dosen_pengampu'];
+                // Validasi tipe file bukti (cegah upload .php dll ke disk public).
+                if ($request->hasFile("items.$key.file_bukti")) {
+                    $buktiValidator = \Illuminate\Support\Facades\Validator::make(
+                        ['bukti' => $request->file("items.$key.file_bukti")],
+                        ['bukti' => ['file', 'max:5120', 'mimes:pdf,xls,xlsx,doc,docx,rtf,txt,jpg,jpeg,png']]
+                    );
+                    if ($buktiValidator->fails()) {
+                        DB::rollBack();
+                        return redirect()->back()
+                            ->with('error', 'File bukti tidak valid: ' . $buktiValidator->errors()->first('bukti'))
+                            ->withInput();
+                    }
+                }
                 $filePath = $request->hasFile("items.$key.file_bukti") ? $request->file("items.$key.file_bukti")->store('bukti_ajar', 'public') : null;
 
                 SkpDosenPerkuliahan::create([
@@ -1353,6 +1382,8 @@ class UserSkpController extends Controller
     public function destroyPerkuliahan($id) {
         $item = SkpDosenPerkuliahan::findOrFail($id);
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($item->penilaian_skp_dosen_id);
+        // Guard IDOR: penilaian wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         $item->delete();
@@ -1412,6 +1443,8 @@ class UserSkpController extends Controller
     }
 
     public function detailSeminar($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataGasal = SkpDosenSeminar::where('penilaian_skp_dosen_id', $penilaian->id)->where('semester', 'gasal')->first();
@@ -1425,6 +1458,8 @@ class UserSkpController extends Controller
 
     public function storeSeminar(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1494,6 +1529,8 @@ class UserSkpController extends Controller
     }
 
     public function detailPkl($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenPkl::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1507,6 +1544,8 @@ class UserSkpController extends Controller
 
     public function storePkl(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1557,6 +1596,8 @@ class UserSkpController extends Controller
     }
 
     public function detailBimbing($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenBimbing::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1573,6 +1614,8 @@ class UserSkpController extends Controller
 
     public function storeBimbing(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1631,6 +1674,8 @@ class UserSkpController extends Controller
     }
 
     public function detailPenguji($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenPenguji::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1644,6 +1689,8 @@ class UserSkpController extends Controller
 
     public function storePenguji(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1696,6 +1743,8 @@ class UserSkpController extends Controller
     }
 
     public function detailKemahasiswaan($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $daftarKegiatan = SkpDosenKemahasiswaan::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1708,6 +1757,8 @@ class UserSkpController extends Controller
 
     public function storeKemahasiswaan(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1740,6 +1791,8 @@ class UserSkpController extends Controller
     public function destroyKemahasiswaan($id) {
         $item = SkpDosenKemahasiswaan::findOrFail($id);
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($item->penilaian_skp_dosen_id);
+        // Guard IDOR: penilaian wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         $item->delete();
@@ -1791,6 +1844,8 @@ class UserSkpController extends Controller
     }
 
     public function detailBahan($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenBahanKuliah::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1804,6 +1859,8 @@ class UserSkpController extends Controller
 
     public function storeBahan(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1859,6 +1916,8 @@ class UserSkpController extends Controller
     private function getMasterKaryaIlmiah() { return ['Monograf' => 20, 'Buku referensi' => 40, 'Artikel di jurnal ilmiah internasional' => 40, 'Artikel di jurnal ilmiah nasional terakreditasi' => 25, 'Artikel di jurnal ilmiah nasional' => 10, 'Makalah disajikan di seminar internasional' => 15, 'Makalah disajikan di seminar nasional' => 10, 'Poster internasional' => 10, 'Poster nasional' => 5, 'Artikel di majalah/koran' => 1, 'Hasil Penelitian / hasil pemikiran yg tidak dipublikasikan (tersimpan diperpustakaan PT)' => 2, 'Menerjemahkan/menyadur buku ilmiah diterbitkan/diedarkan secara Nasional' => 15, 'Mengedit/menyunting karya ilmiah, diterbitkan dan diedarkan secara Nasional' => 10, 'Membuat rencana dan karya teknologi yang dipatenkan tingkat Internasional' => 60, 'Membuat rencana dan karya teknologi yang dipatenkan tingkat Nasional' => 40, 'Membuat rancangan dan karya teknologi, rancangan dan karya seni monumental/seni pertunjukan/karya sastra Tk. Internasional' => 20, 'Membuat rancangan dan karya teknologi, rancangan dan karya seni monumental/seni pertunjukan/karya sastra Tk. Nasional' => 15, 'Membuat rancangan dan karya teknologi, rancangan dan karya seni monumental/seni pertunjukan/karya sastra Tk. Lokal' => 10]; }
 
     public function detailKaryaIlmiah($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenKaryaIlmiah::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1872,6 +1931,8 @@ class UserSkpController extends Controller
 
     public function storeKaryaIlmiah(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1924,6 +1985,8 @@ class UserSkpController extends Controller
     private function getMasterAbdimas() { return ['A' => ['title' => 'Kegiatan Abdimas lebih dari 6 bulan', 'items' => ['Satu semester/lebih Memberikan pelatihan/penyuluhan/penataran/ ceramah pada masyarakat Tingkat Internasional' => 4, 'Satu Semester / Lebih Memberikan pelatihan/ penyuluhan/ penataran/ ceramah pada masyarakat Tingkat Nasional' => 3, 'Satu Semester / Lebih Memberikan pelatihan/ penyuluhan/ penataran/ ceramah pada masyarakat Tingkat Lokal' => 2]], 'B' => ['title' => 'Kegiatan Abdimas kurang dari 6 bulan', 'items' => ['Kurang dari satu Semester Memberikan pelatihan/ penyuluhan/ penataran/ ceramah pada masyarakat Tingkat Internasional' => 3, 'Kurang dari satu semester Memberikan pelatihan/ penyuluhan/ penataran/ ceramah pada masyarakat Tingkat Nasional' => 2, 'Kurang dari Satu semester Memberikan pelatihan/ penyuluhan/ penataran/ ceramah pada masyarakat Tingkat Lokal' => 1, 'Insidental' => 1]], 'C' => ['title' => 'Kegiatan Abdimas yang dilaksanakan dalam periode waktu 1 tahun', 'items' => ['Menduduki jabatan pimpinan pada lembaga pemerintahan/pejabat negara yang harus dibebaskan dari jabatan organiknya' => 5.5, 'Melaksanakan pengembangan hasil pendidikan dan penelitian yang dapat dimanfaatkan' => 3, 'Memberi pelayanan kepada masyarakat atau kegiatan lain yang menunjang pelaksanaan tugas umum pemerintah dan pembangunan berdasarkan keahlian' => 1.5, 'Memberi pelayanan kepada masyarakat atau kegiatan lain yang menunjang pelaksanaan tugas umum pemerintah dan pembangunan berdasarkan penugasan lembaga PT' => 1, 'Memberi pelayanan kepada masyarakat atau kegiatan lain yang menunjang pelaksanaan tugas umum pemerintah dan pembangunan berdasarkan fungsi/jabatan' => 0.5, 'Membuat/menulis karya pengabdian pada masyarakat yang tidak dipublikasikan' => 3]]]; }
 
     public function detailAbdimas($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenAbdimas::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -1937,6 +2000,8 @@ class UserSkpController extends Controller
 
     public function storeAbdimas(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -1995,6 +2060,8 @@ class UserSkpController extends Controller
     private function getMasterJabatan() { return [1 => ['nama' => 'Rektor', 'ak' => 6], 2 => ['nama' => 'Pembantu/Wakil Rektor', 'ak' => 5], 3 => ['nama' => 'Dekan', 'ak' => 5], 4 => ['nama' => 'Direktur Pasca Sarjana', 'ak' => 5], 5 => ['nama' => 'Ketua Sekolah Tinggi', 'ak' => 4], 10 => ['nama' => 'Pembantu/Wakil Dekan', 'ak' => 4], 13 => ['nama' => 'Ketua Jurusan/Bagian', 'ak' => 3], 15 => ['nama' => 'Sekretaris Jurusan', 'ak' => 3], 16 => ['nama' => 'Kepala Laboratorium', 'ak' => 3]]; }
 
     public function detailJabatan($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $dataDB = SkpDosenJabatan::where('penilaian_skp_dosen_id', $penilaian->id)->first();
@@ -2008,6 +2075,8 @@ class UserSkpController extends Controller
 
     public function storeJabatan(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -2103,6 +2172,8 @@ class UserSkpController extends Controller
     }
 
     public function detailPenunjang($skp_id) {
+        // Guard: skp_dosen_id harus milik user yang login (cegah IDOR antar user).
+        if (SkpDosen::findOrFail($skp_id)->user_id != Auth::id()) abort(403, 'Anda tidak memiliki akses ke data SKP ini.');
         $penilaian = PenilaianSkpDosen::firstOrCreate(['user_id' => Auth::id(), 'skp_dosen_id' => $skp_id], ['realisasi_ak' => 0, 'realisasi_kuantitas' => 0]);
         $targetSkp = SkpDosen::findOrFail($skp_id);
         $daftarKegiatan = SkpDosenPenunjang::where('penilaian_skp_dosen_id', $penilaian->id)->get();
@@ -2115,6 +2186,8 @@ class UserSkpController extends Controller
 
     public function storePenunjang(Request $request) {
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($request->penilaian_id);
+        // Guard IDOR: penilaian yang diubah wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         if ($request->has('reset') && $request->reset == 'true') {
@@ -2142,6 +2215,8 @@ class UserSkpController extends Controller
     public function destroyPenunjang($id) {
         $item = SkpDosenPenunjang::findOrFail($id);
         $penilaian = PenilaianSkpDosen::with('skpDosen')->findOrFail($item->penilaian_skp_dosen_id);
+        // Guard IDOR: penilaian wajib milik user yang login.
+        if ($penilaian->user_id != Auth::id()) abort(403, 'Anda tidak memiliki otoritas atas data penilaian ini.');
         $this->pastikanPengisianBuka($penilaian->skpDosen->periode_skp_id);
 
         $item->delete();
@@ -2171,8 +2246,16 @@ class UserSkpController extends Controller
         $path = $request->query('path');
         if (!$path) abort(404);
         if (!str_starts_with($path, 'skp-tendik/')) abort(403);
+
+        // Cegah path traversal (mis. ?path=skp-tendik/../../.env): setelah
+        // resolve realpath, file wajib tetap berada di dalam direktori
+        // storage/app/public/skp-tendik.
         $fullPath = storage_path('app/public/' . $path);
-        if (!file_exists($fullPath)) abort(404);
-        return response()->file($fullPath);
+        $realFullPath = realpath($fullPath);
+        $realBaseDir = realpath(storage_path('app/public/skp-tendik'));
+        if ($realFullPath === false || $realBaseDir === false || !str_starts_with($realFullPath, $realBaseDir . DIRECTORY_SEPARATOR)) {
+            abort(403);
+        }
+        return response()->file($realFullPath);
     }
 }

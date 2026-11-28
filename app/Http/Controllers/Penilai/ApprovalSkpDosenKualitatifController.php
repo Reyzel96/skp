@@ -81,7 +81,23 @@ class ApprovalSkpDosenKualitatifController extends Controller implements HasMidd
 
     public function approve(Request $request, $id)
     {
+        $user = Auth::user();
         $header = SkpHeader::findOrFail($id);
+
+        // Otoritas: hanya penilai yang ditunjuk di header ini (atau pimpinan
+        // bypass) yang boleh menyetujui — sejajarkan dengan guard index().
+        $isBypassRole = $user->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2'])
+            || $user->roles->contains(fn ($r) => str_contains($r->name, 'Kaprodi'));
+        $isAssignedEvaluator = in_array($user->id, array_filter([
+            $header->penilai_utama_id,
+            $header->penilai_akhir_id,
+            $header->pejabat_penilai_id,
+            $header->atasan_pejabat_penilai_id,
+        ]));
+        if (!$isAssignedEvaluator && !$isBypassRole) {
+            abort(403, 'Anda tidak memiliki otoritas untuk menyetujui SKP ini.');
+        }
+
         $header->status = 'Disetujui';
         $header->is_target_approved_penilai = true;
         $header->target_approved_at = now();
@@ -92,7 +108,23 @@ class ApprovalSkpDosenKualitatifController extends Controller implements HasMidd
 
     public function reject(Request $request, $id)
     {
+        $user = Auth::user();
         $header = SkpHeader::findOrFail($id);
+
+        // Otoritas: sama dengan approve() — hanya penilai yang ditunjuk
+        // (atau pimpinan bypass) yang boleh mengembalikan untuk revisi.
+        $isBypassRole = $user->hasAnyRole(['Dekan', 'Rektorat', 'Rektor', 'Wadek 1', 'Wadek 2'])
+            || $user->roles->contains(fn ($r) => str_contains($r->name, 'Kaprodi'));
+        $isAssignedEvaluator = in_array($user->id, array_filter([
+            $header->penilai_utama_id,
+            $header->penilai_akhir_id,
+            $header->pejabat_penilai_id,
+            $header->atasan_pejabat_penilai_id,
+        ]));
+        if (!$isAssignedEvaluator && !$isBypassRole) {
+            abort(403, 'Anda tidak memiliki otoritas untuk merevisi SKP ini.');
+        }
+
         $header->status = 'Revisi';
         $header->catatan_penilai = $request->catatan ?? 'Terdapat revisi pada target SKP Anda.';
         $header->save();

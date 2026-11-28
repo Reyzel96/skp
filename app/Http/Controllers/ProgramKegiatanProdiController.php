@@ -219,6 +219,16 @@ public function listAdmin()
 }
 public function show(ProgramKegiatanProdi $pengajuan)
 {
+    $user = auth()->user();
+    // Guard otoritas: pemilik pengajuan, reviewer (Dekan/Wadek 2/Admin Keuangan/
+    // Rektorat/Super Admin), atau user satu prodi. Cegah IDOR baca antar prodi.
+    $isOwner = ($pengajuan->user_id === $user->id);
+    $isReviewer = $user->hasAnyRole(['Dekan', 'Wadek 2', 'Admin Keuangan Fakultas', 'Rektorat', 'Super Admin']);
+    $isSameProdi = $pengajuan->prodi_id !== null
+        && $user->profile !== null
+        && (int) $user->profile->prodi_id === (int) $pengajuan->prodi_id;
+    if (!$isOwner && !$isReviewer && !$isSameProdi) abort(403);
+
     $pengajuan->load(['programKegiatan', 'user.profile', 'dekanApprover', 'wadekApprover', 'adminApprover', 'realisasi.creator']);
     return view('program-kegiatan-prodi.show', compact('pengajuan'));
 }
@@ -233,8 +243,13 @@ public function approve(Request $request, ProgramKegiatanProdi $pengajuan)
     ]);
 
     if ($validated['action'] === 'tolak') {
+        // Guard role: penolakan hanya boleh dilakukan reviewer berwenang
+        // (sebelumnya user mana pun yang login bisa menolak pengajuan mana pun).
+        if (!$user->hasAnyRole(['Dekan', 'Wadek 2', 'Admin Keuangan Fakultas', 'Rektorat', 'Super Admin'])) {
+            abort(403, 'Anda tidak memiliki otoritas untuk menolak pengajuan ini.');
+        }
         $pengajuan->update([
-            'status_persetujuan' => 'ditolak', 
+            'status_persetujuan' => 'ditolak',
             'catatan' => $validated['catatan'] ?? null
         ]);
     } else {

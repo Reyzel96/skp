@@ -360,7 +360,6 @@ class MasterSkpApprovalController extends Controller implements HasMiddleware
                     ->whereDoesntHave('details')
                     ->delete();
             }
-
             $activity->delete();
 
             DB::commit();

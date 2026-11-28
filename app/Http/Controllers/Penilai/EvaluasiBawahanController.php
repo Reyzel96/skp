@@ -163,7 +163,13 @@ class EvaluasiBawahanController extends Controller
         $skp = SkpTendik::with('details', 'user.profile')->findOrFail($skp_id);
         $header = SkpHeader::where('user_id', $skp->user_id)->where('periode_skp_id', $skp->periode_skp_id)->first();
         $penilai = Auth::user();
-        
+
+        // Guard: header wajib ada — tanpa ini, $header->penilai_* di bawah
+        // fatal error ("attempt to read property on null") bila header hilang.
+        if (!$header) {
+            abort(404, 'Header SKP untuk pegawai/periode ini tidak ditemukan.');
+        }
+
         $isBypassRole = $penilai->hasAnyRole(['Dekan', 'Rektorat', 'Rektor']) || 
                         $penilai->roles->contains(fn($r) => str_contains($r->name, 'Kaprodi'));
         $isAssignedEvaluator = ($header->penilai_utama_id == $penilai->id || $header->penilai_akhir_id == $penilai->id || $header->pejabat_penilai_id == $penilai->id || $header->atasan_pejabat_penilai_id == $penilai->id);
@@ -417,13 +423,15 @@ class EvaluasiBawahanController extends Controller
                 foreach($request->hasil_kerja as $type_id => $val) {
                     if (str_starts_with($type_id, 'utama_')) {
                         $id = str_replace('utama_', '', $type_id);
-                        \App\Models\SkpKualitatif::where('id', $id)->update(['hasil_kerja' => $val]);
+                        // Scope ke header ini: cegah penilai menulis baris
+                        // kualitatif milik header lain (IDOR).
+                        \App\Models\SkpKualitatif::where('id', $id)->where('skp_header_id', $header->id)->update(['hasil_kerja' => $val]);
                     } elseif (str_starts_with($type_id, 'tambahan_')) {
                         $id = str_replace('tambahan_', '', $type_id);
-                        \App\Models\SkpKualitatifTugasTambahan::where('id', $id)->update(['hasil_kerja' => $val]);
+                        \App\Models\SkpKualitatifTugasTambahan::where('id', $id)->where('skp_header_id', $header->id)->update(['hasil_kerja' => $val]);
                     } elseif (str_starts_with($type_id, 'perilaku_')) {
                         $id = str_replace('perilaku_', '', $type_id);
-                        \App\Models\SkpKualitatifPerilaku::where('id', $id)->update(['hasil_kerja' => $val]);
+                        \App\Models\SkpKualitatifPerilaku::where('id', $id)->where('skp_header_id', $header->id)->update(['hasil_kerja' => $val]);
                     }
                 }
             }
@@ -432,13 +440,14 @@ class EvaluasiBawahanController extends Controller
                 foreach($request->umpan_balik as $type_id => $val) {
                     if (str_starts_with($type_id, 'utama_')) {
                         $id = str_replace('utama_', '', $type_id);
-                        \App\Models\SkpKualitatif::where('id', $id)->update(['umpan_balik' => $val]);
+                        // Scope ke header ini (IDOR guard).
+                        \App\Models\SkpKualitatif::where('id', $id)->where('skp_header_id', $header->id)->update(['umpan_balik' => $val]);
                     } elseif (str_starts_with($type_id, 'tambahan_')) {
                         $id = str_replace('tambahan_', '', $type_id);
-                        \App\Models\SkpKualitatifTugasTambahan::where('id', $id)->update(['umpan_balik' => $val]);
+                        \App\Models\SkpKualitatifTugasTambahan::where('id', $id)->where('skp_header_id', $header->id)->update(['umpan_balik' => $val]);
                     } elseif (str_starts_with($type_id, 'perilaku_')) {
                         $id = str_replace('perilaku_', '', $type_id);
-                        \App\Models\SkpKualitatifPerilaku::where('id', $id)->update(['umpan_balik' => $val]);
+                        \App\Models\SkpKualitatifPerilaku::where('id', $id)->where('skp_header_id', $header->id)->update(['umpan_balik' => $val]);
                     }
                 }
             }
@@ -464,12 +473,21 @@ class EvaluasiBawahanController extends Controller
             abort(403, 'Akses tidak diizinkan.');
         }
 
+        // Path traversal guard: normalisasi path lalu pastikan hasil realpath
+        // tetap DI DALAM direktori storage/app/public/skp-tendik.
+        // Tanpa ini, "skp-tendik/../../.env" lolos cek prefix di atas.
+        $baseReal = realpath(storage_path('app/public/skp-tendik'));
         $fullPath = storage_path('app/public/' . $path);
-        if (!file_exists($fullPath)) {
+        $fullReal = realpath($fullPath);
+        if ($baseReal === false || $fullReal === false || !str_starts_with($fullReal, $baseReal . DIRECTORY_SEPARATOR)) {
+            abort(403, 'Akses tidak diizinkan.');
+        }
+
+        if (!file_exists($fullReal)) {
             abort(404, 'File bukti tidak ditemukan.');
         }
 
-        return response()->file($fullPath);
+        return response()->file($fullReal);
     }
 
     /**

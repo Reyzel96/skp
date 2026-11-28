@@ -1979,9 +1979,17 @@ class SuperAdminController extends Controller
         $path = $request->query('path');
         if (!$path) abort(404);
         if (!str_starts_with($path, 'skp-tendik/')) abort(403);
+
+        // Cegah path traversal (mis. ?path=skp-tendik/../../.env): setelah
+        // resolve realpath, file wajib tetap berada di dalam direktori
+        // storage/app/public/skp-tendik.
         $fullPath = storage_path('app/public/' . $path);
-        if (!file_exists($fullPath)) abort(404);
-        return response()->file($fullPath);
+        $realFullPath = realpath($fullPath);
+        $realBaseDir = realpath(storage_path('app/public/skp-tendik'));
+        if ($realFullPath === false || $realBaseDir === false || !str_starts_with($realFullPath, $realBaseDir . DIRECTORY_SEPARATOR)) {
+            abort(403);
+        }
+        return response()->file($realFullPath);
     }
 
     public function settingsIndex()
